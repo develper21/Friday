@@ -1,0 +1,16 @@
+{
+  "audio": {
+    "device": "USB Audio Device",
+    "sample_rate": 16000,
+    "vad_enabled": true,
+    "vad_aggressiveness": 2,
+    "frame_duration_ms": 30
+  },
+  "speech": {
+    "model_size": "base",
+    "device": "cuda",
+    "compute_type": "int8",
+    "language": "en"
+  },
+  "shutdown_delay": 10
+}
