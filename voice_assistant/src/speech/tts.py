@@ -5,8 +5,10 @@ Provides voice output for Jean Max assistant using Edge TTS (Microsoft Neural Vo
 
 import tempfile
 import os
+import time
 import subprocess
 import asyncio
+import threading
 from typing import Optional
 from datetime import datetime
 
@@ -15,26 +17,21 @@ class TextToSpeech:
     def __init__(self, voice_name: str = "Jean Max", gender: str = "female"):
         """
         Initialize TTS engine with Edge TTS
-        
-        Args:
-            voice_name: Name of the assistant
-            gender: Voice gender (male/female)
         """
         self.voice_name = voice_name
         self.gender = gender
+        self.is_speaking = False
+        self.stop_requested = False
+        self.speech_thread = None
+        self.current_process: Optional[subprocess.Popen] = None
         
-        # Edge TTS has very natural neural voices
-        # en-US-AriaNeural - Young female voice (very natural)
-        # en-US-JennyNeural - Young female voice (friendly)
-        # en-US-GuyNeural - Young male voice
         if gender == "female":
-            self.voice = "en-US-AriaNeural"  # Young, natural female voice
+            self.voice = "en-US-AriaNeural"  # Natural female voice
         else:
             self.voice = "en-US-GuyNeural"
         
-        # Check if edge-tts is available
         self.edgetts_available = self._check_edgetts()
-        
+
     def _check_edgetts(self) -> bool:
         """Check if edge-tts is installed"""
         try:
@@ -44,51 +41,97 @@ class TextToSpeech:
             print("Warning: edge-tts not found. Install with: pip install edge-tts")
             return False
     
-    def speak(self, text: str):
+    def speak(self, text: str, blocking: bool = False):
         """
         Speak the given text using Edge TTS
-        
-        Args:
-            text: Text to speak
         """
+        if not text:
+            return
+
         if not self.edgetts_available:
             print(f"[{self.voice_name}]: {text}")
             return
-            
+        
+        # Stop any current speech immediately
+        self.stop()
+        
+        self.stop_requested = False
+        if blocking:
+            self._speak_thread(text)
+        else:
+            self.speech_thread = threading.Thread(target=self._speak_thread, args=(text,), daemon=True)
+            self.speech_thread.start()
+    
+    def _speak_thread(self, text: str):
+        """Speech execution in thread"""
+        self.is_speaking = True
+        temp_path = None
+        
         try:
             import edge_tts
             
             # Generate audio using edge-tts
             communicate = edge_tts.Communicate(text, self.voice)
             
-            # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
                 temp_path = tmp_file.name
             
-            # Save audio
             asyncio.run(communicate.save(temp_path))
             
-            # Play the audio
-            self._play_audio(temp_path)
+            # Play audio if not stopped
+            if not self.stop_requested:
+                self._play_audio(temp_path)
             
-            # Clean up
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-                
         except Exception as e:
-            print(f"Error speaking: {e}")
-            print(f"[{self.voice_name}]: {text}")
+            if not self.stop_requested:
+                print(f"Error speaking: {e}")
+                print(f"[{self.voice_name}]: {text}")
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+            self.is_speaking = False
+            self.current_process = None
+    
+    def stop(self):
+        """
+        Stop current speech immediately
+        """
+        self.stop_requested = True
+        if self.current_process:
+            try:
+                self.current_process.kill()
+                self.current_process.wait(timeout=0.2)
+            except Exception:
+                pass
+            self.current_process = None
+        self.is_speaking = False
     
     def _play_audio(self, audio_path: str):
-        """Play audio file"""
+        """Play audio file with process tracking for instant cancellation"""
         try:
-            # Try different audio players
-            players = ["mpg123", "aplay", "paplay", "ffplay"]
+            players = ["mpg123", "pw-play", "aplay", "ffplay"]
             
             for player in players:
                 try:
-                    subprocess.run([player, audio_path], check=True, 
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    cmd = [player, audio_path]
+                    if player == "ffplay":
+                        cmd = [player, "-nodisp", "-autoexit", "-loglevel", "quiet", audio_path]
+
+                    process = subprocess.Popen(cmd,
+                                             stdout=subprocess.DEVNULL, 
+                                             stderr=subprocess.DEVNULL)
+                    self.current_process = process
+                    
+                    while process.poll() is None:
+                        if self.stop_requested:
+                            process.kill()
+                            process.wait(timeout=0.2)
+                            return
+                        time.sleep(0.05)
+                    
                     return
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     continue
@@ -96,14 +139,12 @@ class TextToSpeech:
             print("No audio player found. Install mpg123: sudo apt install mpg123")
             
         except Exception as e:
-            print(f"Error playing audio: {e}")
+            if not self.stop_requested:
+                print(f"Error playing audio: {e}")
     
     def get_greeting(self) -> str:
         """
         Get time-based greeting
-        
-        Returns:
-            Greeting string
         """
         hour = datetime.now().hour
         
