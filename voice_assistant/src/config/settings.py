@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
+from dotenv import load_dotenv
 
 
 @dataclass
@@ -30,10 +31,17 @@ class SpeechConfig:
 
 
 @dataclass
+class WeatherConfig:
+    """Weather API configuration"""
+    api_key: Optional[str] = None
+
+
+@dataclass
 class Config:
     """Main configuration"""
     audio: AudioConfig
     speech: SpeechConfig
+    weather: WeatherConfig
     shutdown_delay: int = 10
 
 
@@ -43,13 +51,33 @@ class ConfigLoader:
         Initialize config loader
         
         Args:
-            config_path: Path to config file (default: ~/.config/voice_assistant/config.json)
+            config_path: Path to config file (default: local config.json, then ~/.config/voice_assistant/config.json)
         """
+        # Load .env file from project root
+        self._load_env()
+        
         if config_path is None:
-            config_path = self._default_config_path()
+            # Try local config first, then system config
+            project_root = Path(__file__).parent.parent.parent
+            local_config = project_root / "config" / "config.json"
+            if local_config.exists():
+                config_path = str(local_config)
+                print(f"Using local config: {local_config}")
+            else:
+                config_path = self._default_config_path()
             
         self.config_path = Path(config_path).expanduser()
         
+    def _load_env(self):
+        """Load .env file from project root"""
+        # Get the project root (3 levels up from this file)
+        project_root = Path(__file__).parent.parent.parent
+        env_file = project_root / ".env"
+        
+        if env_file.exists():
+            load_dotenv(env_file)
+            print(f"Loaded environment variables from {env_file}")
+    
     def _default_config_path(self) -> str:
         """Get default config path"""
         xdg = os.environ.get("XDG_CONFIG_HOME")
@@ -87,6 +115,9 @@ class ConfigLoader:
                     compute_type=data.get('speech', {}).get('compute_type', 'int8'),
                     language=data.get('speech', {}).get('language', 'en')
                 ),
+                weather=WeatherConfig(
+                    api_key=os.environ.get('OPENWEATHERMAP_API_KEY')
+                ),
                 shutdown_delay=data.get('shutdown_delay', 10)
             )
             
@@ -100,6 +131,9 @@ class ConfigLoader:
         return Config(
             audio=AudioConfig(),
             speech=SpeechConfig(),
+            weather=WeatherConfig(
+                api_key=os.environ.get('OPENWEATHERMAP_API_KEY')
+            ),
             shutdown_delay=10
         )
     
