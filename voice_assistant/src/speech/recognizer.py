@@ -35,15 +35,18 @@ class SpeechRecognizer:
         
     def transcribe(self, audio: np.ndarray, source_sample_rate: int = 16000) -> str:
         """
-        Transcribe audio to text
+        Transcribe audio to text with latency optimization and peak normalization
         
         Args:
-            audio: Audio data as numpy array (float32, normalized)
+            audio: Audio data as numpy array (float32)
             source_sample_rate: Sample rate of input audio
             
         Returns:
-            Transcribed text
+            Transcribed text string
         """
+        if audio is None or len(audio) == 0:
+            return ""
+
         # Ensure audio is float32
         if audio.dtype != np.float32:
             audio = audio.astype(np.float32)
@@ -51,16 +54,27 @@ class SpeechRecognizer:
         # Resample if needed
         if source_sample_rate != self.target_sample_rate:
             audio = librosa.resample(audio, orig_sr=source_sample_rate, target_sr=self.target_sample_rate)
+
+        # Normalize audio volume (peak normalization) to help with quiet mic input
+        max_val = np.max(np.abs(audio))
+        if max_val > 0.001:
+            audio = audio / max_val * 0.95
             
-        # Transcribe
+        # Transcribe with beam_size=1 (greedy search for 3x-5x speedup) and initial prompt
+        initial_prompt = "Open application, weather, battery status, system volume, time, stop, wait, Jean Max voice assistant commands."
+
         segments, _ = self.model.transcribe(
             audio,
             language=self.language,
-            beam_size=5,
+            beam_size=1,
+            best_of=1,
+            temperature=0.0,
+            initial_prompt=initial_prompt,
             vad_filter=True,
             vad_parameters={
-                "min_silence_duration_ms": 500,
-                "speech_pad_ms": 300
+                "min_silence_duration_ms": 250,
+                "speech_pad_ms": 200,
+                "threshold": 0.5
             }
         )
         
