@@ -31,16 +31,19 @@ class AudioInputHandler:
         Returns:
             Device index or None for default
         """
-        if device is None or device == "default":
+        if not device or device.lower() == "default":
             return None
             
         # If it's already an integer
         try:
-            return int(device)
+            val = int(device)
+            devs = sd.query_devices()
+            if 0 <= val < len(devs) and devs[val]['max_input_channels'] > 0:
+                return val
         except ValueError:
             pass
             
-        # Search by name
+        # Search by name (only devices with >0 input channels)
         devices = sd.query_devices()
         for idx, dev in enumerate(devices):
             if dev['max_input_channels'] > 0:
@@ -48,7 +51,7 @@ class AudioInputHandler:
                     print(f"Found audio device: {dev['name']} (index {idx})")
                     return idx
                     
-        print(f"Warning: Device '{device}' not found, using default")
+        print(f"Device '{device}' not found or has no input channels. Using default input device.")
         return None
     
     def record(self, duration: float) -> np.ndarray:
