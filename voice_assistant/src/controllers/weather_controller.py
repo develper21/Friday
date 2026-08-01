@@ -15,7 +15,9 @@ class WeatherController:
         Args:
             api_key: OpenWeatherMap API key (optional, will use wttr.in if not provided)
         """
-        self.api_key = api_key
+        # Force use of wttr.in (free, no API key required) for reliability
+        print("Using wttr.in (free weather service) - no API key required")
+        self.api_key = None
         self.base_url = "https://api.openweathermap.org/data/2.5"
         
     def get_weather(self, location: Optional[str] = None) -> Optional[Dict]:
