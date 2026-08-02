@@ -379,8 +379,8 @@ try:
     from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, QObject
     from PyQt6.QtGui import QFont, QColor, QPalette, QPixmap, QPainter
 
-    from desktop_app.themes import JARVIS_THEME_STYLESHEET, COLORS, _ensure_icons, _ICON_STYLESHEET_TEMPLATE
-    from desktop_app.mcp_catalogue import get_wizard_entries, MCPEntry
+    from app.ui.themes import JARVIS_THEME_STYLESHEET, COLORS, _ensure_icons, _ICON_STYLESHEET_TEMPLATE
+    from app.integrations.mcp_catalogue import get_wizard_entries, MCPEntry
 
     # Import location utilities with crash protection for Windows native modules
     try:
@@ -410,11 +410,33 @@ except ImportError:
     _PYQT6_AVAILABLE = False
     # Define stubs so module can be imported for detection functions only
     # These stubs allow the class definitions to parse without errors
-    QThread = object
-    QWizard = object
-    QWizardPage = object
-    QWidget = object
-    QFrame = object
+    class QThread:
+        def __init__(self, parent=None): pass
+        def start(self): pass
+        def wait(self, timeout=None): pass
+    class WizardStyle:
+        ModernStyle = 0
+    class QWizard:
+        WizardStyle = WizardStyle
+        def __init__(self, parent=None): pass
+        def setWindowTitle(self, title): pass
+        def setWizardStyle(self, style): pass
+        def setMinimumSize(self, w, h): pass
+        def addPage(self, page): return 0
+        def exec(self): return 0
+        def setStyleSheet(self, style): pass
+        def show(self): pass
+        def raise_(self): pass
+        def activateWindow(self): pass
+    class QWizardPage:
+        def __init__(self, parent=None): pass
+        def setTitle(self, title): pass
+        def setSubTitle(self, subtitle): pass
+        def registerField(self, name, widget): pass
+    class QWidget:
+        def __init__(self, parent=None): pass
+    class QFrame:
+        def __init__(self, parent=None): pass
     Qt = None
     QTimer = None
     QObject = None

@@ -57,8 +57,12 @@ def get_supported_model_ids():
     """Get supported model IDs"""
     return SUPPORTED_CHAT_MODELS
 
+def _default_dictation_hotkey():
+    """Get default dictation hotkey"""
+    return "ctrl+alt+d"
+
 __all__ = [
     'default_config_path', '_default_db_path', 'load_config', 'load_settings',
     'get_default_config', '_load_json', '_save_json', 'SUPPORTED_CHAT_MODELS',
-    'DEFAULT_CHAT_MODEL', 'get_supported_model_ids'
+    'DEFAULT_CHAT_MODEL', 'get_supported_model_ids', '_default_dictation_hotkey'
 ]

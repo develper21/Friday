@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QFont
 
-from desktop_app.themes import JARVIS_THEME_STYLESHEET, COLORS
+from app.ui.themes import JARVIS_THEME_STYLESHEET, COLORS
 
 
 # ---------------------------------------------------------------------------

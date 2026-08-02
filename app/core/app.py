@@ -1493,7 +1493,7 @@ class JarvisSystemTray:
 
     def show_setup_wizard(self) -> None:
         """Show the setup wizard window."""
-        from app.setup_wizard import SetupWizard
+        from app.ui.dialogs.setup_wizard import SetupWizard
         from PyQt6.QtWidgets import QWizard
 
         # Remember if daemon was running before wizard
@@ -2319,7 +2319,7 @@ def _show_openai_unreachable_dialog(cfg) -> None:
 def _run_setup_wizard() -> bool:
     """Create and show the SetupWizard modally. Returns True if accepted."""
     try:
-        from app.setup_wizard import SetupWizard
+        from app.ui.dialogs.setup_wizard import SetupWizard
         wizard = SetupWizard()
         wizard.show()
         wizard.raise_()
@@ -2478,7 +2478,7 @@ def main() -> int:
             show_crash_report_dialog(previous_crash)
 
         # Show splash screen during startup
-        from app.splash_screen import SplashScreen
+        from app.ui.dialogs.splash_screen import SplashScreen
         splash = SplashScreen()
         splash.show()
         splash.set_status("Initializing...")
@@ -2489,7 +2489,7 @@ def main() -> int:
         print("Checking Ollama setup status...", flush=True)
         print("  Loading setup wizard module...", flush=True)
         try:
-            from app.setup_wizard import (
+            from app.ui.dialogs.setup_wizard import (
                 should_show_setup_wizard,
                 check_ollama_server, check_ollama_cli,
                 get_required_models, check_installed_models,

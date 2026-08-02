@@ -28,8 +28,8 @@ from jarvis.config import (
     SUPPORTED_CHAT_MODELS,
 )
 from jarvis.debug import debug_log
-from desktop_app.themes import apply_theme
-from desktop_app.mcp_catalogue import CATALOGUE, CATALOGUE_BY_NAME, MCPEntry
+from app.ui.themes import apply_theme
+from app.integrations.mcp_catalogue import CATALOGUE, CATALOGUE_BY_NAME, MCPEntry
 
 
 # ---------------------------------------------------------------------------
