@@ -33,6 +33,11 @@ class Intent(Enum):
     SPOTIFY_RESUME = "spotify_resume"
     INTERRUPT = "interrupt"
     GREETING = "greeting"
+    TERMINAL_EXEC = "terminal_exec"
+    PHONE_LOCATION = "phone_location"
+    START_TRACKING = "start_tracking"
+    STOP_TRACKING = "stop_tracking"
+    TRACKING_STATUS = "tracking_status"
     UNKNOWN = "unknown"
 
 
@@ -47,7 +52,14 @@ class ParsedCommand:
 
 class CommandParser:
     def __init__(self):
-        """Initialize command parser"""
+        """Initialize command parser with PyTorch Neural Engine support"""
+        try:
+            from assistance.nlp.neural_engine import JeanMaxNeuralEngine
+            self.neural_engine = JeanMaxNeuralEngine()
+        except Exception as e:
+            print(f"Notice: Neural Engine init skipped: {e}")
+            self.neural_engine = None
+
         self.intent_patterns = {
             Intent.INTERRUPT: [
                 "wait jean", "stop jean", "jean wait", "jean stop", 
@@ -67,12 +79,32 @@ class CommandParser:
             Intent.VOLUME_MUTE: ["mute volume", "mute audio", "unmute", "mute"],
             Intent.TIME_DATE: ["what time is it", "current time", "what's the time", "time", "date", "today's date", "what is the date"],
             Intent.SEARCH_WEB: ["search google for", "search youtube for", "search web for", "google search", "youtube search", "search for"],
-            Intent.GREETING: ["hello", "hi", "hey", "who are you", "what is your name", "what's your name", "who made you", "introduce yourself"]
+            Intent.GREETING: ["hello", "hi", "hey", "who are you", "what is your name", "what's your name", "who made you", "introduce yourself"],
+            Intent.PHONE_LOCATION: [
+                "where is my phone", "phone location", "find my phone", "locate my phone", 
+                "phone kidhar hai", "mera phone kidhar hai", "phone kahan hai", "phone location batao",
+                "current phone location", "phone ka location", "phone track karo", "phone location check karo"
+            ],
+            Intent.START_TRACKING: [
+                "start tracking", "start phone tracking", "enable tracking", "activate tracking",
+                "phone tracking start karo", "tracking shuru karo", "track my phone", 
+                "phone ko track karo", "location tracking start", "monitor my phone",
+                "phone lost", "mera phone gayab hai", "phone kho gaya", "find my phone continuously"
+            ],
+            Intent.STOP_TRACKING: [
+                "stop tracking", "stop phone tracking", "disable tracking", "deactivate tracking",
+                "phone tracking stop karo", "tracking band karo", "stop monitoring",
+                "phone tracking ruk jao", "location tracking stop"
+            ],
+            Intent.TRACKING_STATUS: [
+                "tracking status", "phone tracking status", "tracking information",
+                "tracking kaisa chal raha hai", "tracking status batao", "monitoring status"
+            ]
         }
         
     def parse(self, text: str) -> ParsedCommand:
         """
-        Parse voice command text
+        Parse voice command text using PyTorch Neural Engine when available
         """
         if not text:
             return ParsedCommand(intent=Intent.UNKNOWN)
@@ -84,6 +116,13 @@ class CommandParser:
         for keyword in self.intent_patterns[Intent.INTERRUPT]:
             if keyword in text_lower:
                 return ParsedCommand(intent=Intent.INTERRUPT)
+
+        # Try Neural Model Prediction first (JeanMax.pt)
+        if self.neural_engine and self.neural_engine.is_loaded:
+            neural_res = self.neural_engine.predict(text_lower)
+            if neural_res and neural_res.intent != Intent.UNKNOWN and neural_res.confidence >= 0.40:
+                print(f"🧠 [JeanMax.pt Neural Engine] Matched Intent: {neural_res.intent.name} (Conf: {neural_res.confidence*100:.1f}%)")
+                return neural_res
 
         # Check Spotify Add to Playlist
         if "add" in text_lower and ("playlist" in text_lower or " to " in text_lower or "to my" in text_lower):
