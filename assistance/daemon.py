@@ -13,12 +13,16 @@ from .audio.input_handler import AudioInputHandler
 from .audio.vad import VoiceActivityDetector
 from .speech.recognizer import SpeechRecognizer
 from .speech.tts import TextToSpeech
-from .nlp.parser import CommandParser, Intent
+from .nlp.neural_engine import JeanMaxNeuralEngine
+from .nlp.parser import Intent, ParsedCommand
 from .controllers.app_manager import AppManager
 from .controllers.browser_controller import BrowserController
 from .controllers.system_controller import SystemController
 from .controllers.weather_controller import WeatherController
 from .controllers.spotify_controller import SpotifyController
+from .controllers.terminal_controller import TerminalController
+from .controllers.phone_tracking_controller import PhoneTrackingController, TrackingMode
+from .controllers.phone_tracking_http_server import PhoneTrackingHTTPServer
 from .config.settings import ConfigLoader, Config
 
 
@@ -59,8 +63,9 @@ class VoiceAssistantDaemon:
             language=config.speech.language
         )
         
-        # NLP parser
-        self.parser = CommandParser()
+        # Neural Engine for intent classification and conversational responses
+        self.neural_engine = JeanMaxNeuralEngine()
+
         
         # Controllers
         self.app_manager = AppManager()
@@ -68,6 +73,50 @@ class VoiceAssistantDaemon:
         self.system_controller = SystemController()
         self.weather_controller = WeatherController(api_key=config.weather.api_key)
         self.spotify_controller = SpotifyController()
+        self.terminal_controller = TerminalController()
+        
+        # Phone Tracking Controller
+        if config.phone_tracking.enabled:
+            phone_tracking_config = {
+                'device_id': config.phone_tracking.device_id,
+                'http_server_port': config.phone_tracking.http_server_port,
+                'location_change_threshold': config.phone_tracking.location_change_threshold,
+                'monitoring_interval': config.phone_tracking.monitoring_interval,
+                'alert_cooldown': config.phone_tracking.alert_cooldown,
+                'max_location_history': config.phone_tracking.max_location_history,
+                'enable_location_prediction': config.phone_tracking.enable_location_prediction
+            }
+            self.phone_tracking_controller = PhoneTrackingController(phone_tracking_config)
+            
+            # Register alert callback for TTS
+            self.phone_tracking_controller.register_alert_callback(self._phone_tracking_alert_callback)
+            
+            # Start HTTP server for receiving location data
+            self.phone_tracking_http_server = PhoneTrackingHTTPServer(
+                self.phone_tracking_controller,
+                port=config.phone_tracking.http_server_port,
+                host=config.phone_tracking.http_server_host
+            )
+            
+            if self.phone_tracking_http_server.start():
+                print(f"✓ Phone tracking HTTP server started on {config.phone_tracking.http_server_host}:{config.phone_tracking.http_server_port}")
+            else:
+                print("✗ Failed to start phone tracking HTTP server")
+                self.phone_tracking_http_server = None
+                
+            # Auto-start tracking if configured
+            if config.phone_tracking.auto_start_tracking:
+                mode = TrackingMode.PASSIVE
+                if config.phone_tracking.default_tracking_mode == 'active':
+                    mode = TrackingMode.ACTIVE
+                elif config.phone_tracking.default_tracking_mode == 'continuous':
+                    mode = TrackingMode.CONTINUOUS
+                
+                self.phone_tracking_controller.start_tracking(mode)
+                print(f"✓ Phone tracking auto-started in {config.phone_tracking.default_tracking_mode} mode")
+        else:
+            self.phone_tracking_controller = None
+            self.phone_tracking_http_server = None
         
         # TTS (Jean Max - female voice)
         self.tts = TextToSpeech(voice_name="Jean Max", gender="female")
@@ -100,6 +149,22 @@ class VoiceAssistantDaemon:
         response_text = "What happening, i can hear tell me why are you stopping me ?"
         print(f"[Jean Max]: {response_text}")
         self.tts.speak(response_text, blocking=True)
+    
+    def _phone_tracking_alert_callback(self, alert):
+        """
+        Callback for phone tracking alerts
+        Handles location change alerts via TTS
+        """
+        try:
+            print(f"📱 Phone Tracking Alert: {alert.message}")
+            
+            # Only speak critical and warning alerts, not info alerts in continuous mode
+            if alert.severity.value in ['critical', 'warning']:
+                self.tts.speak(alert.message)
+            elif alert.severity.value == 'info' and 'location update' not in alert.message.lower():
+                self.tts.speak(alert.message)
+        except Exception as e:
+            print(f"Error in phone tracking alert callback: {e}")
 
     def listen_and_process(self) -> bool:
         """
@@ -187,7 +252,7 @@ class VoiceAssistantDaemon:
 
     def _process_audio(self, audio: np.ndarray) -> bool:
         """
-        Transcribe audio and execute parsed command
+        Transcribe audio and execute parsed command with conversational responses
         """
         print("⚡ Transcribing speech...")
         text = self.speech_recognizer.transcribe(audio, source_sample_rate=self.config.audio.sample_rate)
@@ -202,11 +267,20 @@ class VoiceAssistantDaemon:
             self.handle_interruption()
             return True
 
-        # Parse command
-        command = self.parser.parse(text)
+        # Process input via Neural Engine (Intent + Conversational Response)
+        command, conversational_response = self.neural_engine.predict(text)
 
-        # Execute command
-        return self._execute_command(command)
+        # If conversational response is available, speak it
+        if conversational_response:
+            print(f"[Jean Max]: {conversational_response}")
+            self.tts.speak(conversational_response)
+        
+        # If command is available, execute it
+        if command and command.intent != Intent.UNKNOWN:
+            return self._execute_command(command)
+        
+        return True
+
 
     def _execute_command(self, command) -> bool:
         """
@@ -362,6 +436,13 @@ class VoiceAssistantDaemon:
                 self.tts.speak(greeting)
                 return True
 
+            elif intent == Intent.TERMINAL_EXEC:
+                print("💻 Processing Terminal Command...")
+                task_text = entity if entity else command.original_text if hasattr(command, 'original_text') else "update system"
+                success, response_msg = self.terminal_controller.execute_task_by_phrase(task_text)
+                self.tts.speak(response_msg)
+                return success
+
             elif intent == Intent.POWER_OFF:
                 self.tts.speak("Yes sir, shutting down system")
                 return self.system_controller.power_off(self.config.shutdown_delay)
@@ -369,6 +450,61 @@ class VoiceAssistantDaemon:
             elif intent == Intent.RESTART:
                 self.tts.speak("Yes sir, restarting system")
                 return self.system_controller.restart(self.config.shutdown_delay)
+
+            elif intent == Intent.PHONE_LOCATION:
+                if self.phone_tracking_controller:
+                    print("📍 Fetching phone location...")
+                    location = self.phone_tracking_controller.get_current_location()
+                    response = self.phone_tracking_controller.format_location_response(location)
+                    self.tts.speak(response)
+                    return True
+                else:
+                    self.tts.speak("Sorry sir, phone tracking is not enabled")
+                    return False
+
+            elif intent == Intent.START_TRACKING:
+                if self.phone_tracking_controller:
+                    print("🚀 Starting phone tracking...")
+                    # Determine tracking mode based on command
+                    mode = TrackingMode.ACTIVE
+                    if entity and "continuous" in entity.lower():
+                        mode = TrackingMode.CONTINUOUS
+                    elif entity and "passive" in entity.lower():
+                        mode = TrackingMode.PASSIVE
+                    
+                    success = self.phone_tracking_controller.start_tracking(mode)
+                    if success:
+                        mode_desc = "active monitoring" if mode == TrackingMode.ACTIVE else "continuous tracking" if mode == TrackingMode.CONTINUOUS else "passive mode"
+                        self.tts.speak(f"Yes sir, phone tracking started in {mode_desc}")
+                    else:
+                        self.tts.speak("Sorry sir, failed to start phone tracking")
+                    return success
+                else:
+                    self.tts.speak("Sorry sir, phone tracking is not enabled")
+                    return False
+
+            elif intent == Intent.STOP_TRACKING:
+                if self.phone_tracking_controller:
+                    print("🛑 Stopping phone tracking...")
+                    success = self.phone_tracking_controller.stop_tracking()
+                    if success:
+                        self.tts.speak("Yes sir, phone tracking stopped")
+                    else:
+                        self.tts.speak("Sorry sir, failed to stop phone tracking")
+                    return success
+                else:
+                    self.tts.speak("Sorry sir, phone tracking is not enabled")
+                    return False
+
+            elif intent == Intent.TRACKING_STATUS:
+                if self.phone_tracking_controller:
+                    print("📊 Getting phone tracking status...")
+                    status = self.phone_tracking_controller.get_tracking_status()
+                    self.tts.speak(status)
+                    return True
+                else:
+                    self.tts.speak("Sorry sir, phone tracking is not enabled")
+                    return False
 
             elif intent == Intent.UNKNOWN:
                 print("✗ Command not recognized")
@@ -399,7 +535,15 @@ class VoiceAssistantDaemon:
         print("  - what time is it / date")
         print("  - volume up / volume down / mute")
         print("  - search google for [query] / search youtube for [query]")
-        print("  - power off / restart\n")
+        print("  - update system / upgrade linux (e.g., 'update system', 'upgrade packages')")
+        print("  - run command [cmd]      (e.g., 'run command htop', 'run command git status')")
+        print("  - install [package]      (e.g., 'install vlc', 'install htop')")
+        print("  - power off / restart")
+        print("  📱 Phone Tracking:")
+        print("    - where is my phone / phone location / mera phone kidhar hai")
+        print("    - start tracking / phone tracking start karo / track my phone")
+        print("    - stop tracking / phone tracking stop karo")
+        print("    - tracking status / tracking status batao\n")
 
     def run(self):
         """Main event loop"""
