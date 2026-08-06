@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 
@@ -37,11 +37,28 @@ class WeatherConfig:
 
 
 @dataclass
+class PhoneTrackingConfig:
+    """Phone tracking configuration"""
+    enabled: bool = True
+    device_id: str = "default"
+    http_server_port: int = 8080
+    http_server_host: str = "0.0.0.0"
+    location_change_threshold: int = 100  # meters
+    monitoring_interval: int = 30  # seconds
+    alert_cooldown: int = 300  # seconds (5 minutes)
+    max_location_history: int = 1000
+    enable_location_prediction: bool = False
+    auto_start_tracking: bool = False
+    default_tracking_mode: str = "passive"  # passive, active, continuous
+
+
+@dataclass
 class Config:
     """Main configuration"""
     audio: AudioConfig
     speech: SpeechConfig
     weather: WeatherConfig
+    phone_tracking: PhoneTrackingConfig = field(default_factory=PhoneTrackingConfig)
     shutdown_delay: int = 10
 
 
@@ -118,6 +135,19 @@ class ConfigLoader:
                 weather=WeatherConfig(
                     api_key=os.environ.get('OPENWEATHERMAP_API_KEY')
                 ),
+                phone_tracking=PhoneTrackingConfig(
+                    enabled=data.get('phone_tracking', {}).get('enabled', True),
+                    device_id=data.get('phone_tracking', {}).get('device_id', 'default'),
+                    http_server_port=data.get('phone_tracking', {}).get('http_server_port', 8080),
+                    http_server_host=data.get('phone_tracking', {}).get('http_server_host', '0.0.0.0'),
+                    location_change_threshold=data.get('phone_tracking', {}).get('location_change_threshold', 100),
+                    monitoring_interval=data.get('phone_tracking', {}).get('monitoring_interval', 30),
+                    alert_cooldown=data.get('phone_tracking', {}).get('alert_cooldown', 300),
+                    max_location_history=data.get('phone_tracking', {}).get('max_location_history', 1000),
+                    enable_location_prediction=data.get('phone_tracking', {}).get('enable_location_prediction', False),
+                    auto_start_tracking=data.get('phone_tracking', {}).get('auto_start_tracking', False),
+                    default_tracking_mode=data.get('phone_tracking', {}).get('default_tracking_mode', 'passive')
+                ),
                 shutdown_delay=data.get('shutdown_delay', 10)
             )
             
@@ -134,6 +164,7 @@ class ConfigLoader:
             weather=WeatherConfig(
                 api_key=os.environ.get('OPENWEATHERMAP_API_KEY')
             ),
+            phone_tracking=PhoneTrackingConfig(),
             shutdown_delay=10
         )
     
@@ -154,6 +185,19 @@ class ConfigLoader:
                 "device": "cuda",
                 "compute_type": "int8",
                 "language": "en"
+            },
+            "phone_tracking": {
+                "enabled": True,
+                "device_id": "default",
+                "http_server_port": 8080,
+                "http_server_host": "0.0.0.0",
+                "location_change_threshold": 100,
+                "monitoring_interval": 30,
+                "alert_cooldown": 300,
+                "max_location_history": 1000,
+                "enable_location_prediction": False,
+                "auto_start_tracking": False,
+                "default_tracking_mode": "passive"
             },
             "shutdown_delay": 10
         }
