@@ -179,7 +179,11 @@ def train_model(fine_tune: bool = True):
         fine_tune: If True and existing model exists, only train new intents (transfer learning)
                   If False, train from scratch
     """
-    model_path = "/home/narvin/Documents/AI/Friday/JeanMax.pt"
+    # Create model directory if it doesn't exist
+    model_dir = "/home/narvin/Documents/AI/Friday/model"
+    os.makedirs(model_dir, exist_ok=True)
+    
+    model_path = os.path.join(model_dir, "JeanMax.pt")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Load existing model if available
@@ -360,7 +364,7 @@ def train_model(fine_tune: bool = True):
         "num_responses": num_responses
     }
 
-    output_path_jean = "/home/narvin/Documents/AI/Friday/JeanMax.pt"
+    output_path_jean = os.path.join(model_dir, "JeanMax.pt")
 
     torch.save(checkpoint, output_path_jean)
 

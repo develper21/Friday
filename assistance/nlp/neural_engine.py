@@ -83,7 +83,22 @@ class JeanMaxNeuralEngine:
     Loads JeanMax.pt PyTorch neural model checkpoint and executes inference.
     Now supports multi-task learning: intent classification + conversational response generation.
     """
-    def __init__(self, model_path: str = "/home/narvin/Documents/AI/Friday/JeanMax.pt"):
+    def __init__(self, model_path: str = None):
+        # Auto-detect model path if not provided
+        if model_path is None:
+            # Try multiple possible locations
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), "../../model/JeanMax.pt"),
+                os.path.join(os.path.dirname(__file__), "../../../model/JeanMax.pt"),
+                "model/JeanMax.pt",
+                "../model/JeanMax.pt",
+                "/home/narvin/Documents/AI/Friday/model/JeanMax.pt"
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    model_path = path
+                    break
+        
         self.model_path = model_path
         self.model = None
         self.vectorizer = None
@@ -94,8 +109,8 @@ class JeanMaxNeuralEngine:
 
     def load_model(self) -> bool:
         """Load PyTorch checkpoint file with multi-task support"""
-        if not os.path.exists(self.model_path):
-            print(f"⚠️ PyTorch checkpoint {self.model_path} not found. Running training first...")
+        if self.model_path is None or not os.path.exists(self.model_path):
+            print(f" PyTorch checkpoint not found. Checked multiple locations. Running training first...")
             return False
 
         try:
