@@ -5,6 +5,7 @@ Fetches weather information including temperature, air quality, and pollution da
 
 import requests
 from typing import Optional, Dict
+from core.cache.response_cache import weather_cache, cached
 
 
 class WeatherController:
@@ -35,6 +36,7 @@ class WeatherController:
         else:
             return self._get_wttr_weather(location)
     
+    @cached(weather_cache)
     def _get_wttr_weather(self, location: Optional[str] = None) -> Optional[Dict]:
         """
         Get weather from wttr.in (free, no API key required)
@@ -242,7 +244,8 @@ class WeatherController:
                     response += "The air quality is unhealthy. "
                 else:
                     response += "The air quality is very unhealthy. "
-            except:
+            except (KeyError, ValueError, TypeError) as e:
+                print(f"Error processing air quality data: {e}")
                 pass
         
         response += "That's all the weather information I have for you, sir."
