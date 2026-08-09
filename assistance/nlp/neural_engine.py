@@ -10,6 +10,7 @@ import math
 import re
 from typing import Optional, Tuple
 from assistance.nlp.parser import Intent, ParsedCommand
+from assistance.utils.logger import logger
 
 # Re-create vectorizer for inference loading
 class InferenceVectorizer:
@@ -111,7 +112,7 @@ class JeanMaxNeuralEngine:
     def load_model(self) -> bool:
         """Load PyTorch checkpoint file with multi-task support"""
         if self.model_path is None or not os.path.exists(self.model_path):
-            print(f" PyTorch checkpoint not found. Checked multiple locations. Running training first...")
+            logger.warning("PyTorch checkpoint not found. Checked multiple locations. Running training first...")
             return False
 
         try:
@@ -134,8 +135,8 @@ class JeanMaxNeuralEngine:
                 self.model.load_state_dict(checkpoint["model_state_dict"])
                 self.model.eval()
 
-                print(f"🧠 PyTorch JeanMax.pt Multi-Task Model loaded successfully! (Device: {self.device})")
-                print(f"   - Intents: {num_intents}, Responses: {num_responses}")
+                logger.ai(f"PyTorch JeanMax.pt Multi-Task Model loaded successfully! (Device: {self.device})")
+                logger.info(f"   - Intents: {num_intents}, Responses: {num_responses}")
             else:
                 # Fallback for old single-task model
                 num_classes = checkpoint["num_classes"]
@@ -157,11 +158,11 @@ class JeanMaxNeuralEngine:
                 self.model.load_state_dict(new_state_dict, strict=False)
                 self.model.eval()
 
-                print(f"🧠 PyTorch JeanMax.pt Legacy Model loaded successfully! (Device: {self.device})")
+                logger.ai(f"PyTorch JeanMax.pt Legacy Model loaded successfully! (Device: {self.device})")
             
             return True
         except Exception as e:
-            print(f"❌ Failed to load PyTorch model {self.model_path}: {e}")
+            logger.error(f"Failed to load PyTorch model {self.model_path}: {e}")
             return False
 
     def predict(self, text: str) -> Tuple[Optional[ParsedCommand], Optional[str]]:
