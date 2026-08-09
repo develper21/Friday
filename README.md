@@ -54,19 +54,79 @@ python src/main.py
 
 ## Architecture
 
+JeanMax has been refactored with modern design patterns for better maintainability and extensibility.
+
+### New Architecture (Recommended)
+
 ```
-voice_assistant/
-├── src/
-│   ├── audio/          # Microphone input & VAD
-│   ├── speech/         # Whisper STT & Edge TTS
-│   ├── nlp/            # Intent parser & entity extraction
-│   ├── controllers/    # Dynamic Desktop App Manager, Weather, Browser, System
-│   ├── config/         # Config loader
-│   ├── daemon.py       # Main Voice Assistant Orchestrator
-│   └── main.py         # Entry point
-├── config/
-│   └── config.json
-├── requirements.txt
-└── README.md
+Friday/
+├── core/                    # Core business logic
+│   ├── interfaces/          # Abstract interfaces for all services
+│   ├── di/                  # Dependency injection container
+│   ├── events/              # Event bus for loose coupling
+│   ├── observable/          # Observer pattern for state management
+│   └── plugins/             # Plugin system for extensibility
+├── services/                # Service layer implementations
+│   ├── audio/               # Audio & VAD services
+│   ├── speech/              # STT & TTS services
+│   ├── nlp/                 # Neural engine & intent parser
+│   └── controllers/         # Application, system, weather controllers
+├── infrastructure/          # Infrastructure layer
+│   └── storage/             # Repository pattern for data access
+├── plugins/                 # Extensible plugins
+├── assistance/              # Voice assistant modules
+│   ├── daemon.py            # Original daemon (legacy)
+│   └── daemon_refactored.py # New refactored daemon
+├── config/                  # Configuration files
+├── data/                    # Training data & storage
+└── doc/                     # Documentation
 ```
+
+### Architecture Features
+
+- **Dependency Injection**: Loose coupling between components via DI container
+- **Event-Driven**: Components communicate via event bus instead of direct calls
+- **Service Layer**: Business logic separated from infrastructure
+- **Repository Pattern**: Data access abstraction for easy testing
+- **Plugin System**: Extensible architecture for adding new features
+- **Observable Pattern**: State management with change notifications
+
+### Migration Status
+
+**✅ Migration Complete** - New architecture is now the default.
+
+**Old Architecture** (Preserved for reference):
+- `assistance/daemon_legacy.py` - Original monolithic daemon (backup)
+
+**New Architecture** (Active):
+- `assistance/daemon.py` - Refactored daemon with DI & events (now active)
+- `core/` - Interfaces, DI container, event bus, plugin system
+- `services/` - Service implementations wrapping original code
+- `infrastructure/` - Repository layer for data access
+
+### Running the Assistant
+
+**Default (New Architecture)**:
+```bash
+./run.sh
+```
+
+**Using Legacy Daemon** (if needed):
+```bash
+source venv/bin/activate
+python -c "from assistance.daemon_legacy import VoiceAssistantDaemon; from assistance.config.settings import ConfigLoader; daemon = VoiceAssistantDaemon(ConfigLoader().load()); daemon.run()"
+```
+
+### Development
+
+**Adding New Features**:
+1. Create interface in `core/interfaces/`
+2. Implement service in `services/`
+3. Register in `core/di/service_config.py`
+4. Use in `daemon_refactored.py`
+
+**Creating Plugins**:
+1. Implement `IPlugin` interface
+2. Place in `plugins/` directory
+3. Load via `PluginManager`
 
