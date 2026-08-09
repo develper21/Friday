@@ -9,6 +9,7 @@ from typing import Optional
 import librosa
 import threading
 from assistance.utils.errors import SpeechRecognitionError
+from assistance.utils.logger import logger
 
 
 class SpeechRecognizer:
@@ -23,13 +24,13 @@ class SpeechRecognizer:
         
         with cls._cache_lock:
             if cache_key not in cls._model_cache:
-                print(f"Loading Whisper model {model_size} on {device} with {compute_type}...")
+                logger.ai(f"Loading Whisper model {model_size} on {device} with {compute_type}...")
                 cls._model_cache[cache_key] = WhisperModel(
                     model_size,
                     device=device,
                     compute_type=compute_type
                 )
-                print("Whisper model loaded and cached!")
+                logger.success("Whisper model loaded and cached!")
             return cls._model_cache[cache_key]
     
     @classmethod
@@ -37,7 +38,7 @@ class SpeechRecognizer:
         """Clear model cache to free memory"""
         with cls._cache_lock:
             cls._model_cache.clear()
-            print("Model cache cleared")
+            logger.info("Model cache cleared")
     
     def __init__(self, model_size: str = "base", device: str = "cuda", 
                  compute_type: str = "int8", language: str = "en", 
@@ -114,7 +115,7 @@ class SpeechRecognizer:
             return text.strip()
         except RuntimeError as e:
             if "CUDA out of memory" in str(e):
-                print("⚠️ CUDA OOM, falling back to CPU")
+                logger.warning("CUDA OOM, falling back to CPU")
                 # Could implement fallback logic here
             raise SpeechRecognitionError(f"Speech recognition failed: {e}")
         except Exception as e:
