@@ -8,8 +8,18 @@ import os
 import json
 import subprocess
 import urllib.parse
+import sys
 from typing import Tuple, Dict, Any, Optional, List
 from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+try:
+    from core.security.secrets import SecretManager
+    SECRETS_AVAILABLE = True
+except ImportError:
+    SECRETS_AVAILABLE = False
 
 try:
     import spotipy
@@ -24,6 +34,15 @@ class SpotifyController:
         """Initialize Spotify Controller"""
         self.sp = None
         self.playlists_file = Path.home() / ".config" / "voice_assistant" / "local_playlists.json"
+        self.secret_manager = None
+        
+        # Initialize secret manager if available
+        if SECRETS_AVAILABLE:
+            try:
+                self.secret_manager = SecretManager()
+            except Exception as e:
+                print(f"Failed to initialize secret manager: {e}")
+        
         self._init_spotify_api()
         self._init_local_playlists()
 
@@ -33,9 +52,30 @@ class SpotifyController:
             print("ℹ Spotipy library not available. Using desktop MPRIS/URI controls.")
             return
 
-        client_id = os.environ.get("SPOTIPY_CLIENT_ID") or os.environ.get("SPOTIFY_CLIENT_ID")
-        client_secret = os.environ.get("SPOTIPY_CLIENT_SECRET") or os.environ.get("SPOTIFY_CLIENT_SECRET")
-        redirect_uri = os.environ.get("SPOTIPY_REDIRECT_URI") or os.environ.get("SPOTIFY_REDIRECT_URI") or "http://127.0.0.1:8888/callback"
+        # Try to get credentials from secure storage first
+        client_id = None
+        client_secret = None
+        redirect_uri = "http://127.0.0.1:8888/callback"
+        
+        if self.secret_manager:
+            try:
+                client_id = self.secret_manager.get_secret("spotify_client_id")
+                client_secret = self.secret_manager.get_secret("spotify_client_secret")
+                redirect_uri_stored = self.secret_manager.get_secret("spotify_redirect_uri")
+                if redirect_uri_stored:
+                    redirect_uri = redirect_uri_stored
+            except Exception as e:
+                print(f"Failed to retrieve credentials from secure storage: {e}")
+        
+        # Fallback to environment variables
+        if not client_id:
+            client_id = os.environ.get("SPOTIPY_CLIENT_ID") or os.environ.get("SPOTIFY_CLIENT_ID")
+        if not client_secret:
+            client_secret = os.environ.get("SPOTIPY_CLIENT_SECRET") or os.environ.get("SPOTIFY_CLIENT_SECRET")
+        if not redirect_uri or redirect_uri == "http://127.0.0.1:8888/callback":
+            redirect_uri_env = os.environ.get("SPOTIPY_REDIRECT_URI") or os.environ.get("SPOTIFY_REDIRECT_URI")
+            if redirect_uri_env:
+                redirect_uri = redirect_uri_env
 
         if client_id and client_secret:
             try:
