@@ -47,8 +47,14 @@ class VoiceActivityDetector:
         # Ensure frame is bytes
         frame_bytes = frame.tobytes()
         
-        # webrtcvad requires exactly the right size
-        if len(frame_bytes) != self.frame_size * 2:  # 2 bytes per sample
+        # Validate frame size before processing
+        expected_size = len(frame_bytes)
+        if expected_size != self.frame_size * 2:
+            # Log warning instead of silently failing
+            print(
+                f"⚠️ Frame size mismatch: expected {self.frame_size * 2}, got {expected_size}. "
+                f"Sample rate: {self.sample_rate}, Frame duration: {self.frame_duration_ms}ms"
+            )
             return False
             
         return self.vad.is_speech(frame_bytes, self.sample_rate)
