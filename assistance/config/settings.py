@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 import sys
+from assistance.utils.logger import logger
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -144,7 +145,7 @@ class ConfigLoader:
             local_config = project_root / "config" / "config.json"
             if local_config.exists():
                 config_path = str(local_config)
-                print(f"Using local config: {local_config}")
+                logger.info(f"Using local config: {local_config}")
             else:
                 config_path = self._default_config_path()
             
@@ -155,9 +156,9 @@ class ConfigLoader:
         if SECRETS_AVAILABLE:
             try:
                 self.secret_manager = SecretManager()
-                print("Secure secret management enabled")
+                logger.success("Secure secret management enabled")
             except Exception as e:
-                print(f"Failed to initialize secret manager: {e}")
+                logger.warning(f"Failed to initialize secret manager: {e}")
     
     def _load_env(self):
         """Load .env file from project root"""
@@ -167,7 +168,7 @@ class ConfigLoader:
         
         if env_file.exists():
             load_dotenv(env_file)
-            print(f"Loaded environment variables from {env_file}")
+            logger.success(f"Loaded environment variables from {env_file}")
     
     def _default_config_path(self) -> str:
         """Get default config path"""
@@ -207,8 +208,8 @@ class ConfigLoader:
             Config object
         """
         if not self.config_path.exists():
-            print(f"Config not found at {self.config_path}")
-            print("Creating default config...")
+            logger.warning(f"Config not found at {self.config_path}")
+            logger.info("Creating default config...")
             self._create_default_config()
             
         try:
@@ -249,8 +250,8 @@ class ConfigLoader:
             )
             
         except Exception as e:
-            print(f"Error loading config: {e}")
-            print("Using default configuration")
+            logger.error(f"Error loading config: {e}")
+            logger.info("Using default configuration")
             return self._default_config()
     
     def _default_config(self) -> Config:
@@ -302,4 +303,4 @@ class ConfigLoader:
         with open(self.config_path, 'w') as f:
             json.dump(default_data, f, indent=2)
             
-        print(f"Created config at {self.config_path}")
+        logger.success(f"Created config at {self.config_path}")
