@@ -86,13 +86,14 @@ class JeanMaxNeuralEngine:
     def __init__(self, model_path: str = None):
         # Auto-detect model path if not provided
         if model_path is None:
-            # Try multiple possible locations
+            # Try multiple possible locations (removed hardcoded path for portability)
             possible_paths = [
                 os.path.join(os.path.dirname(__file__), "../../model/JeanMax.pt"),
                 os.path.join(os.path.dirname(__file__), "../../../model/JeanMax.pt"),
                 "model/JeanMax.pt",
                 "../model/JeanMax.pt",
-                "/home/narvin/Documents/AI/Friday/model/JeanMax.pt"
+                os.path.expanduser("~/.local/share/jeanmax/model/JeanMax.pt"),  # User-specific
+                os.environ.get("JEANMAX_MODEL_PATH", "model/JeanMax.pt")  # Environment variable
             ]
             for path in possible_paths:
                 if os.path.exists(path):
