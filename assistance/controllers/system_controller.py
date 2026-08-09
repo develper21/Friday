@@ -9,6 +9,7 @@ import time
 import datetime
 import webbrowser
 import psutil
+from core.cache.response_cache import system_cache, cached
 
 
 class SystemController:
@@ -16,6 +17,7 @@ class SystemController:
         """Initialize system controller"""
         self.shutdown_delay = 10  # seconds
 
+    @cached(system_cache)
     def get_battery_info(self) -> str:
         """Get battery percentage and status"""
         try:
@@ -27,16 +29,19 @@ class SystemController:
             plugged = battery.power_plugged
             status_str = "plugged in and charging" if plugged else "running on battery power"
             return f"Sir, your battery is at {percent} percent, and the system is {status_str}."
-        except Exception as e:
+        except (AttributeError, OSError, psutil.Error) as e:
+            print(f"Error getting battery info: {e}")
             return "Sorry sir, I failed to retrieve battery information."
 
+    @cached(system_cache)
     def get_system_status(self) -> str:
         """Get CPU and RAM usage"""
         try:
             cpu_usage = psutil.cpu_percent(interval=0.5)
             ram_usage = psutil.virtual_memory().percent
             return f"Sir, current CPU usage is {cpu_usage} percent, and RAM usage is at {ram_usage} percent."
-        except Exception as e:
+        except (AttributeError, OSError, psutil.Error) as e:
+            print(f"Error getting system status: {e}")
             return "Sorry sir, I could not get system statistics."
 
     def get_time_date(self) -> str:
