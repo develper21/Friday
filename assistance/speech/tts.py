@@ -11,6 +11,7 @@ import asyncio
 import threading
 from typing import Optional
 from datetime import datetime
+from assistance.utils.logger import logger
 
 
 class TextToSpeech:
@@ -59,7 +60,7 @@ class TextToSpeech:
             import edge_tts
             return True
         except ImportError:
-            print("Warning: edge-tts not found. Install with: pip install edge-tts")
+            logger.warning("edge-tts not found. Install with: pip install edge-tts")
             return False
     
     def speak(self, text: str, blocking: bool = False):
@@ -70,7 +71,7 @@ class TextToSpeech:
             return
 
         if not self.edgetts_available:
-            print(f"[{self.voice_name}]: {text}")
+            logger.speech(f"[{self.voice_name}]: {text}")
             return
         
         # Stop any current speech immediately
@@ -105,8 +106,8 @@ class TextToSpeech:
             
         except Exception as e:
             if not self.stop_requested:
-                print(f"Error speaking: {e}")
-                print(f"[{self.voice_name}]: {text}")
+                logger.error(f"Error speaking: {e}")
+                logger.speech(f"[{self.voice_name}]: {text}")
         finally:
             if temp_path and os.path.exists(temp_path):
                 try:
@@ -157,11 +158,11 @@ class TextToSpeech:
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     continue
                     
-            print("No audio player found. Install mpg123: sudo apt install mpg123")
+            logger.warning("No audio player found. Install mpg123: sudo apt install mpg123")
             
         except Exception as e:
             if not self.stop_requested:
-                print(f"Error playing audio: {e}")
+                logger.error(f"Error playing audio: {e}")
     
     def get_greeting(self) -> str:
         """
