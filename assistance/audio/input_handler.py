@@ -6,6 +6,7 @@ Handles microphone input and audio recording
 import sounddevice as sd
 import numpy as np
 from typing import Optional, Callable
+from assistance.utils.errors import AudioInputError
 
 
 class AudioInputHandler:
@@ -20,6 +21,7 @@ class AudioInputHandler:
         self.device = self._resolve_device(device)
         self.sample_rate = sample_rate
         self.is_recording = False
+        self._audio_buffer = None  # Track buffer for cleanup
         
     def _resolve_device(self, device: Optional[str]) -> Optional[int]:
         """
@@ -65,15 +67,31 @@ class AudioInputHandler:
             Audio data as numpy array (1D)
         """
         print(f"Recording for {duration} seconds...")
-        recording = sd.rec(
-            int(duration * self.sample_rate),
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype=np.float32,
-            device=self.device
-        )
-        sd.wait()
-        return recording.flatten()
+        try:
+            recording = sd.rec(
+                int(duration * self.sample_rate),
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype=np.float32,
+                device=self.device
+            )
+            sd.wait()
+            
+            # Store reference for cleanup
+            self._audio_buffer = recording
+            
+            return recording.flatten()
+        except sd.PortAudioError as e:
+            print(f"❌ Audio device error: {e}")
+            raise AudioInputError(f"Failed to record audio: {e}")
+        except Exception as e:
+            print(f"❌ Unexpected recording error: {e}")
+            raise AudioInputError(f"Recording failed: {e}")
+        finally:
+            # Explicit cleanup
+            if hasattr(self, '_audio_buffer') and self._audio_buffer is not None:
+                del self._audio_buffer
+                self._audio_buffer = None
     
     def record_continuous(self, callback: Callable[[np.ndarray], None], 
                          chunk_duration: float = 0.5):
@@ -84,22 +102,35 @@ class AudioInputHandler:
             callback: Function to call with each audio chunk
             chunk_duration: Duration of each chunk in seconds
         """
-        def audio_callback(indata, frames, time, status):
+        chunk_samples = int(chunk_duration * self.sample_rate)
+        
+        def audio_callback(indata, frames, time_info, status):
             if status:
-                print(f"Audio status: {status}")
+                print(f"Audio callback status: {status}")
             callback(indata.flatten())
         
-        self.is_recording = True
-        with sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype=np.float32,
-            device=self.device,
-            callback=audio_callback,
-            blocksize=int(chunk_duration * self.sample_rate)
-        ):
-            while self.is_recording:
-                sd.sleep(100)
+        try:
+            with sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype=np.float32,
+                device=self.device,
+                callback=audio_callback,
+                blocksize=chunk_samples
+            ):
+                self.is_recording = True
+                while self.is_recording:
+                    sd.sleep(100)
+        except Exception as e:
+            print(f"❌ Continuous recording error: {e}")
+            raise AudioInputError(f"Continuous recording failed: {e}")
+        finally:
+            self.is_recording = False
+    
+    def __del__(self):
+        """Cleanup on object destruction"""
+        if hasattr(self, '_audio_buffer') and self._audio_buffer is not None:
+            del self._audio_buffer
     
     def stop_recording(self):
         """Stop continuous recording"""
