@@ -7,6 +7,7 @@ import sounddevice as sd
 import numpy as np
 from typing import Optional, Callable
 from assistance.utils.errors import AudioInputError
+from assistance.utils.logger import logger
 
 
 class AudioInputHandler:
@@ -50,10 +51,10 @@ class AudioInputHandler:
         for idx, dev in enumerate(devices):
             if dev['max_input_channels'] > 0:
                 if device.lower() in str(dev['name']).lower():
-                    print(f"Found audio device: {dev['name']} (index {idx})")
+                    logger.success(f"Found audio device: {dev['name']} (index {idx})")
                     return idx
                     
-        print(f"Device '{device}' not found or has no input channels. Using default input device.")
+        logger.warning(f"Device '{device}' not found or has no input channels. Using default input device.")
         return None
     
     def record(self, duration: float) -> np.ndarray:
@@ -66,7 +67,7 @@ class AudioInputHandler:
         Returns:
             Audio data as numpy array (1D)
         """
-        print(f"Recording for {duration} seconds...")
+        logger.listening(f"Recording for {duration} seconds...")
         try:
             recording = sd.rec(
                 int(duration * self.sample_rate),
@@ -82,10 +83,10 @@ class AudioInputHandler:
             
             return recording.flatten()
         except sd.PortAudioError as e:
-            print(f"❌ Audio device error: {e}")
+            logger.error(f"Audio device error: {e}")
             raise AudioInputError(f"Failed to record audio: {e}")
         except Exception as e:
-            print(f"❌ Unexpected recording error: {e}")
+            logger.error(f"Unexpected recording error: {e}")
             raise AudioInputError(f"Recording failed: {e}")
         finally:
             # Explicit cleanup
@@ -106,7 +107,7 @@ class AudioInputHandler:
         
         def audio_callback(indata, frames, time_info, status):
             if status:
-                print(f"Audio callback status: {status}")
+                logger.debug(f"Audio callback status: {status}")
             callback(indata.flatten())
         
         try:
@@ -122,7 +123,7 @@ class AudioInputHandler:
                 while self.is_recording:
                     sd.sleep(100)
         except Exception as e:
-            print(f"❌ Continuous recording error: {e}")
+            logger.error(f"Continuous recording error: {e}")
             raise AudioInputError(f"Continuous recording failed: {e}")
         finally:
             self.is_recording = False
@@ -138,12 +139,11 @@ class AudioInputHandler:
     
     def list_devices(self):
         """List all available input devices"""
-        print("\nAvailable Audio Input Devices:")
-        print("-" * 60)
+        logger.section("Available Audio Input Devices")
         devices = sd.query_devices()
         for idx, dev in enumerate(devices):
             if dev['max_input_channels'] > 0:
-                print(f"{idx}: {dev['name']}")
-                print(f"   Channels: {dev['max_input_channels']}")
-                print(f"   Sample Rate: {dev['default_samplerate']}")
-        print("-" * 60)
+                logger.print_raw(f"{idx}: {dev['name']}")
+                logger.print_raw(f"   Channels: {dev['max_input_channels']}")
+                logger.print_raw(f"   Sample Rate: {dev['default_samplerate']}")
+        logger.separator("-", 60)
