@@ -8,8 +8,40 @@ import re
 import shlex
 import subprocess
 import psutil
+import json
+from pathlib import Path
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import difflib
+
+
+class SecurityError(Exception):
+    """Security-related error"""
+    pass
+
+
+class PathValidator:
+    """Validates file paths to prevent path traversal attacks"""
+    
+    @staticmethod
+    def validate_path(base_dir: str, user_path: str) -> str:
+        """Validate path is within base directory"""
+        base = Path(base_dir).resolve()
+        target = (base / user_path).resolve()
+        
+        # Ensure target is within base directory
+        try:
+            target.relative_to(base)
+        except ValueError:
+            raise SecurityError("Path traversal attempt detected")
+        
+        # Ensure path exists and is file
+        if not target.exists():
+            raise FileNotFoundError(f"Path not found: {target}")
+        if not target.is_file():
+            raise SecurityError(f"Not a file: {target}")
+        
+        return str(target)
 
 
 class AppEntry:
@@ -28,6 +60,9 @@ class AppEntry:
 
 
 class AppManager:
+    CACHE_FILE = Path.home() / ".cache" / "jeanmax" / "apps_cache.json"
+    CACHE_TTL = 86400  # 24 hours
+    
     def __init__(self):
         """Initialize app manager and index desktop applications"""
         # Common aliases dictionary to map conversational phrases to standard app names/keywords
@@ -74,7 +109,79 @@ class AppManager:
         ]
 
         self.apps_index: List[AppEntry] = []
-        self._index_desktop_files()
+        self._load_or_build_index()
+    
+    def _is_cache_valid(self) -> bool:
+        """Check if cache is valid"""
+        if not self.CACHE_FILE.exists():
+            return False
+        
+        # Check age
+        cache_age = datetime.now().timestamp() - self.CACHE_FILE.stat().st_mtime
+        return cache_age < self.CACHE_TTL
+    
+    def _load_from_cache(self):
+        """Load app index from cache"""
+        try:
+            with open(self.CACHE_FILE, 'r') as f:
+                cache_data = json.load(f)
+                self.apps_index = [
+                    AppEntry(
+                        name=app['name'],
+                        exec_cmd=app['exec_cmd'],
+                        desktop_file=app['desktop_file'],
+                        generic_name=app.get('generic_name', ''),
+                        keywords=app.get('keywords', ''),
+                        wm_class=app.get('wm_class', '')
+                    )
+                    for app in cache_data['apps']
+                ]
+            print("✓ Loaded app index from cache")
+        except Exception as e:
+            print(f"⚠️ Failed to load cache: {e}, rebuilding...")
+            self._build_index()
+    
+    def _save_to_cache(self):
+        """Save app index to cache"""
+        try:
+            self.CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            
+            cache_data = {
+                'apps': [
+                    {
+                        'name': app.name,
+                        'exec_cmd': app.exec_cmd,
+                        'desktop_file': app.desktop_file,
+                        'generic_name': app.generic_name,
+                        'keywords': app.keywords,
+                        'wm_class': app.wm_class
+                    }
+                    for app in self.apps_index
+                ],
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            with open(self.CACHE_FILE, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            print("✓ Saved app index to cache")
+        except Exception as e:
+            print(f"⚠️ Failed to save cache: {e}")
+    
+    def _load_or_build_index(self):
+        """Load from cache or build new index"""
+        if self._is_cache_valid():
+            self._load_from_cache()
+        else:
+            self._build_index()
+            self._save_to_cache()
+    
+    def invalidate_cache(self):
+        """Force cache rebuild"""
+        if self.CACHE_FILE.exists():
+            self.CACHE_FILE.unlink()
+        self._build_index()
+        self._save_to_cache()
+        print("✓ Cache invalidated and rebuilt")
 
     def _clean_exec_command(self, exec_str: str) -> str:
         """Strip desktop field codes like %f, %F, %u, %U, %k, %i, etc."""
@@ -83,7 +190,7 @@ class AppManager:
         cleaned = cleaned.strip()
         return cleaned
 
-    def _index_desktop_files(self):
+    def _build_index(self):
         """Build an index of all installed applications from .desktop files"""
         desktop_dirs = [
             "/usr/share/applications",
@@ -120,7 +227,13 @@ class AppManager:
                         no_display = False
                         in_main_section = False
 
-                        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        # Validate path to prevent traversal attacks
+                        try:
+                            safe_filepath = PathValidator.validate_path(root, filename)
+                        except (SecurityError, FileNotFoundError):
+                            continue
+
+                        with open(safe_filepath, 'r', encoding='utf-8', errors='ignore') as f:
                             for line in f:
                                 line = line.strip()
                                 if line == "[Desktop Entry]":
