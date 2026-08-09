@@ -49,6 +49,11 @@ class DIContainer:
             if param_name == 'self':
                 continue
             
+            # Skip parameters with default values (they're not dependencies)
+            if param.default != param.empty:
+                continue
+            
+            # Only inject if there's a type annotation
             if param.annotation != param.empty:
                 dependencies[param_name] = self.resolve(param.annotation)
         
