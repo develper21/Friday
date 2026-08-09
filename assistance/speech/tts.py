@@ -20,8 +20,9 @@ class TextToSpeech:
         """
         self.voice_name = voice_name
         self.gender = gender
-        self.is_speaking = False
-        self.stop_requested = False
+        self._lock = threading.Lock()
+        self._is_speaking = False
+        self._stop_requested = False
         self.speech_thread = None
         self.current_process: Optional[subprocess.Popen] = None
         
@@ -31,6 +32,26 @@ class TextToSpeech:
             self.voice = "en-US-GuyNeural"
         
         self.edgetts_available = self._check_edgetts()
+    
+    @property
+    def is_speaking(self) -> bool:
+        with self._lock:
+            return self._is_speaking
+    
+    @is_speaking.setter
+    def is_speaking(self, value: bool):
+        with self._lock:
+            self._is_speaking = value
+    
+    @property
+    def stop_requested(self) -> bool:
+        with self._lock:
+            return self._stop_requested
+    
+    @stop_requested.setter
+    def stop_requested(self, value: bool):
+        with self._lock:
+            self._stop_requested = value
 
     def _check_edgetts(self) -> bool:
         """Check if edge-tts is installed"""
