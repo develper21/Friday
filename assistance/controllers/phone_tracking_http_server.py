@@ -12,6 +12,20 @@ from typing import Optional, Callable, Dict, Any
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import socket
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
+
+try:
+    from core.security.ssl_server import SecureHTTPServer
+    from core.security.auth import AuthManager, SecurityError
+    from core.security.rate_limiter import RateLimiter
+    SSL_AVAILABLE = True
+except ImportError:
+    SSL_AVAILABLE = False
+    logging.warning("Security modules not available, running in insecure mode")
 
 
 class LocationRequestHandler(BaseHTTPRequestHandler):
@@ -20,6 +34,8 @@ class LocationRequestHandler(BaseHTTPRequestHandler):
     # Class-level storage for the controller reference
     controller = None
     logger = logging
+    auth_manager = None
+    rate_limiter = None
     
     def _set_response(self, status_code: int = 200, content_type: str = 'application/json'):
         """Set response headers"""
@@ -27,6 +43,36 @@ class LocationRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', content_type)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
+    
+    def _check_auth(self) -> bool:
+        """Check authentication"""
+        if self.auth_manager is None:
+            return True  # Allow if auth not configured
+        
+        auth_header = self.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            self._send_error_response('Missing or invalid authorization header', 401)
+            return False
+        
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        try:
+            user_id = self.auth_manager.verify_token(token)
+            return user_id is not None
+        except SecurityError as e:
+            self._send_error_response(str(e), 401)
+            return False
+    
+    def _check_rate_limit(self) -> bool:
+        """Check rate limiting"""
+        if self.rate_limiter is None:
+            return True  # Allow if rate limiting not configured
+        
+        client_ip = self.client_address[0]
+        if not self.rate_limiter.is_allowed(client_ip):
+            self._send_error_response('Rate limit exceeded', 429)
+            return False
+        
+        return True
     
     def _send_json_response(self, data: Dict[str, Any], status_code: int = 200):
         """Send JSON response"""
@@ -49,6 +95,11 @@ class LocationRequestHandler(BaseHTTPRequestHandler):
     
     def do_GET(self):
         """Handle GET requests"""
+        # Check rate limit
+        if not self._check_rate_limit():
+            return
+        
+        # Health endpoint doesn't require auth
         parsed_path = urlparse(self.path)
         
         if parsed_path.path == '/health':
@@ -57,6 +108,9 @@ class LocationRequestHandler(BaseHTTPRequestHandler):
                 'service': 'phone_tracking_http_server'
             })
         elif parsed_path.path == '/status':
+            # Check auth for status endpoint
+            if not self._check_auth():
+                return
             if self.controller:
                 summary = self.controller.get_location_summary()
                 self._send_success_response(summary)
@@ -67,6 +121,14 @@ class LocationRequestHandler(BaseHTTPRequestHandler):
     
     def do_POST(self):
         """Handle POST requests"""
+        # Check rate limit
+        if not self._check_rate_limit():
+            return
+        
+        # Check auth for all POST endpoints
+        if not self._check_auth():
+            return
+        
         parsed_path = urlparse(self.path)
         
         if parsed_path.path == '/location':
@@ -204,7 +266,9 @@ class PhoneTrackingHTTPServer:
     Runs in a separate thread to avoid blocking the main application
     """
     
-    def __init__(self, controller, port: int = 8080, host: str = '0.0.0.0'):
+    def __init__(self, controller, port: int = 8080, host: str = '0.0.0.0',
+                 enable_ssl: bool = True, enable_auth: bool = True,
+                 enable_rate_limiting: bool = True):
         """
         Initialize HTTP server
         
@@ -212,16 +276,41 @@ class PhoneTrackingHTTPServer:
             controller: PhoneTrackingController instance
             port: Port to listen on
             host: Host to bind to
+            enable_ssl: Enable SSL/TLS encryption
+            enable_auth: Enable JWT authentication
+            enable_rate_limiting: Enable rate limiting
         """
         self.controller = controller
         self.port = port
         self.host = host
+        self.enable_ssl = enable_ssl and SSL_AVAILABLE
+        self.enable_auth = enable_auth
+        self.enable_rate_limiting = enable_rate_limiting
         self.server: Optional[HTTPServer] = None
         self.server_thread: Optional[threading.Thread] = None
         self.is_running = False
         
         # Setup logging
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize security modules
+        if self.enable_auth:
+            try:
+                self.auth_manager = AuthManager()
+                LocationRequestHandler.auth_manager = self.auth_manager
+                self.logger.info("Authentication enabled")
+            except Exception as e:
+                self.logger.warning(f"Failed to enable authentication: {e}")
+                self.enable_auth = False
+        
+        if self.enable_rate_limiting:
+            try:
+                self.rate_limiter = RateLimiter(max_requests=60, window_seconds=60)
+                LocationRequestHandler.rate_limiter = self.rate_limiter
+                self.logger.info("Rate limiting enabled")
+            except Exception as e:
+                self.logger.warning(f"Failed to enable rate limiting: {e}")
+                self.enable_rate_limiting = False
     
     def start(self) -> bool:
         """Start the HTTP server in a background thread"""
@@ -234,15 +323,27 @@ class PhoneTrackingHTTPServer:
             LocationRequestHandler.controller = self.controller
             LocationRequestHandler.logger = self.logger
             
-            # Create server
-            self.server = HTTPServer((self.host, self.port), LocationRequestHandler)
+            # Create server with or without SSL
+            if self.enable_ssl:
+                try:
+                    self.server = SecureHTTPServer.create_server(
+                        self.host, self.port, LocationRequestHandler
+                    )
+                    protocol = "HTTPS"
+                except Exception as e:
+                    self.logger.warning(f"Failed to create SSL server, falling back to HTTP: {e}")
+                    self.server = HTTPServer((self.host, self.port), LocationRequestHandler)
+                    protocol = "HTTP"
+            else:
+                self.server = HTTPServer((self.host, self.port), LocationRequestHandler)
+                protocol = "HTTP"
             
             # Start server in background thread
             self.is_running = True
             self.server_thread = threading.Thread(target=self._run_server, daemon=True)
             self.server_thread.start()
             
-            self.logger.info(f"HTTP server started on {self.host}:{self.port}")
+            self.logger.info(f"{protocol} server started on {self.host}:{self.port}")
             return True
             
         except OSError as e:
