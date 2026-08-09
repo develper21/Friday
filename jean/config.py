@@ -40,7 +40,8 @@ def _load_json(path):
     try:
         with open(path, 'r') as f:
             return json.load(f)
-    except:
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError, IOError) as e:
+        print(f"Failed to load JSON from {path}: {e}")
         return None
 
 def _save_json(path, data):
