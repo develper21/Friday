@@ -9,6 +9,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
+import sys
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+try:
+    from core.security.secrets import SecretManager
+    SECRETS_AVAILABLE = True
+except ImportError:
+    SECRETS_AVAILABLE = False
 
 
 @dataclass
@@ -19,6 +29,18 @@ class AudioConfig:
     vad_enabled: bool = True
     vad_aggressiveness: int = 2
     frame_duration_ms: int = 30
+    
+    def __post_init__(self):
+        """Validate configuration values"""
+        valid_sample_rates = [8000, 16000, 44100, 48000]
+        if self.sample_rate not in valid_sample_rates:
+            raise ValueError(f"Sample rate must be one of {valid_sample_rates}, got {self.sample_rate}")
+        
+        if not 0 <= self.vad_aggressiveness <= 3:
+            raise ValueError(f"VAD aggressiveness must be between 0 and 3, got {self.vad_aggressiveness}")
+        
+        if not 10 <= self.frame_duration_ms <= 100:
+            raise ValueError(f"Frame duration must be between 10 and 100ms, got {self.frame_duration_ms}")
 
 
 @dataclass
@@ -28,6 +50,23 @@ class SpeechConfig:
     device: str = "cuda"
     compute_type: str = "int8"
     language: str = "en"
+    
+    def __post_init__(self):
+        """Validate configuration values"""
+        valid_model_sizes = ["tiny", "base", "small", "medium", "large"]
+        if self.model_size not in valid_model_sizes:
+            raise ValueError(f"Model size must be one of {valid_model_sizes}, got {self.model_size}")
+        
+        valid_devices = ["cuda", "cpu", "auto"]
+        if self.device not in valid_devices:
+            raise ValueError(f"Device must be one of {valid_devices}, got {self.device}")
+        
+        valid_compute_types = ["int8", "float16", "float32"]
+        if self.compute_type not in valid_compute_types:
+            raise ValueError(f"Compute type must be one of {valid_compute_types}, got {self.compute_type}")
+        
+        if not 2 <= len(self.language) <= 10:
+            raise ValueError(f"Language code must be 2-10 characters, got {len(self.language)}")
 
 
 @dataclass
@@ -50,6 +89,27 @@ class PhoneTrackingConfig:
     enable_location_prediction: bool = False
     auto_start_tracking: bool = False
     default_tracking_mode: str = "passive"  # passive, active, continuous
+    
+    def __post_init__(self):
+        """Validate configuration values"""
+        if not 1024 <= self.http_server_port <= 65535:
+            raise ValueError(f"HTTP server port must be between 1024 and 65535, got {self.http_server_port}")
+        
+        if not 10 <= self.location_change_threshold <= 10000:
+            raise ValueError(f"Location change threshold must be between 10 and 10000 meters, got {self.location_change_threshold}")
+        
+        if not 5 <= self.monitoring_interval <= 300:
+            raise ValueError(f"Monitoring interval must be between 5 and 300 seconds, got {self.monitoring_interval}")
+        
+        if not 60 <= self.alert_cooldown <= 3600:
+            raise ValueError(f"Alert cooldown must be between 60 and 3600 seconds, got {self.alert_cooldown}")
+        
+        if not 100 <= self.max_location_history <= 10000:
+            raise ValueError(f"Max location history must be between 100 and 10000, got {self.max_location_history}")
+        
+        valid_modes = ["passive", "active", "continuous"]
+        if self.default_tracking_mode not in valid_modes:
+            raise ValueError(f"Default tracking mode must be one of {valid_modes}, got {self.default_tracking_mode}")
 
 
 @dataclass
@@ -60,6 +120,11 @@ class Config:
     weather: WeatherConfig
     phone_tracking: PhoneTrackingConfig = field(default_factory=PhoneTrackingConfig)
     shutdown_delay: int = 10
+    
+    def __post_init__(self):
+        """Validate configuration values"""
+        if not 0 <= self.shutdown_delay <= 60:
+            raise ValueError(f"Shutdown delay must be between 0 and 60 seconds, got {self.shutdown_delay}")
 
 
 class ConfigLoader:
@@ -85,6 +150,15 @@ class ConfigLoader:
             
         self.config_path = Path(config_path).expanduser()
         
+        # Initialize secret manager if available
+        self.secret_manager = None
+        if SECRETS_AVAILABLE:
+            try:
+                self.secret_manager = SecretManager()
+                print("Secure secret management enabled")
+            except Exception as e:
+                print(f"Failed to initialize secret manager: {e}")
+    
     def _load_env(self):
         """Load .env file from project root"""
         # Get the project root (3 levels up from this file)
@@ -101,6 +175,29 @@ class ConfigLoader:
         if xdg:
             return str(Path(xdg) / "voice_assistant" / "config.json")
         return str(Path.home() / ".config" / "voice_assistant" / "config.json")
+    
+    def _get_api_key(self, env_var: str, secret_name: str) -> Optional[str]:
+        """
+        Get API key from secure storage or environment variable
+        
+        Args:
+            env_var: Environment variable name
+            secret_name: Secret name for secure storage
+            
+        Returns:
+            API key or None
+        """
+        # Try secure storage first
+        if self.secret_manager:
+            try:
+                key = self.secret_manager.get_secret(secret_name)
+                if key:
+                    return key
+            except Exception:
+                pass
+        
+        # Fallback to environment variable
+        return os.environ.get(env_var)
     
     def load(self) -> Config:
         """
@@ -133,7 +230,7 @@ class ConfigLoader:
                     language=data.get('speech', {}).get('language', 'en')
                 ),
                 weather=WeatherConfig(
-                    api_key=os.environ.get('OPENWEATHERMAP_API_KEY')
+                    api_key=self._get_api_key('OPENWEATHERMAP_API_KEY', 'openweathermap_api_key')
                 ),
                 phone_tracking=PhoneTrackingConfig(
                     enabled=data.get('phone_tracking', {}).get('enabled', True),
@@ -162,7 +259,7 @@ class ConfigLoader:
             audio=AudioConfig(),
             speech=SpeechConfig(),
             weather=WeatherConfig(
-                api_key=os.environ.get('OPENWEATHERMAP_API_KEY')
+                api_key=self._get_api_key('OPENWEATHERMAP_API_KEY', 'openweathermap_api_key')
             ),
             phone_tracking=PhoneTrackingConfig(),
             shutdown_delay=10
