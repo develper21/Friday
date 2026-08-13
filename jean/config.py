@@ -5,6 +5,7 @@ Configuration compatibility module.
 from assistance.config.settings import ConfigLoader, Config, AudioConfig, SpeechConfig, WeatherConfig
 from pathlib import Path
 import os
+from assistance.utils.logger import logger
 
 def default_config_path():
     """Get default config path"""
@@ -41,7 +42,7 @@ def _load_json(path):
         with open(path, 'r') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError, PermissionError, IOError) as e:
-        print(f"Failed to load JSON from {path}: {e}")
+        logger.warning(f"Failed to load JSON from {path}: {e}", module="Config")
         return None
 
 def _save_json(path, data):
