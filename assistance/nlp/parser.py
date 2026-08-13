@@ -6,6 +6,7 @@ Parses voice commands and extracts intents and entities
 from enum import Enum
 from typing import Optional, Dict, List
 from dataclasses import dataclass
+from assistance.utils.logger import logger
 
 
 class Intent(Enum):
@@ -38,6 +39,17 @@ class Intent(Enum):
     START_TRACKING = "start_tracking"
     STOP_TRACKING = "stop_tracking"
     TRACKING_STATUS = "tracking_status"
+    # Messaging intents
+    WHATSAPP_READ = "whatsapp_read"
+    WHATSAPP_SEND = "whatsapp_send"
+    WHATSAPP_UNREAD_COUNT = "whatsapp_unread_count"
+    INSTAGRAM_READ = "instagram_read"
+    INSTAGRAM_SEND = "instagram_send"
+    INSTAGRAM_UNREAD_COUNT = "instagram_unread_count"
+    MESSAGES_CHECK = "messages_check"
+    MESSAGES_UNREAD_COUNT = "messages_unread_count"
+    REPLY_MESSAGE = "reply_message"
+    MARK_MESSAGES_READ = "mark_messages_read"
     UNKNOWN = "unknown"
 
 
@@ -57,7 +69,7 @@ class CommandParser:
             from assistance.nlp.neural_engine import JeanMaxNeuralEngine
             self.neural_engine = JeanMaxNeuralEngine()
         except Exception as e:
-            print(f"Notice: Neural Engine init skipped: {e}")
+            logger.warning(f"Neural Engine init skipped: {e}", module="Parser")
             self.neural_engine = None
 
         self.intent_patterns = {
@@ -99,6 +111,50 @@ class CommandParser:
             Intent.TRACKING_STATUS: [
                 "tracking status", "phone tracking status", "tracking information",
                 "tracking kaisa chal raha hai", "tracking status batao", "monitoring status"
+            ],
+            # Messaging intent patterns
+            Intent.WHATSAPP_READ: [
+                "read my whatsapp messages", "read whatsapp", "check whatsapp messages",
+                "whatsapp messages suna", "whatsapp check karo", "show whatsapp messages",
+                "whatsapp messages padh", "mera whatsapp check karo"
+            ],
+            Intent.WHATSAPP_SEND: [
+                "send whatsapp message", "whatsapp message bhej", "send message on whatsapp",
+                "whatsapp pe message bhejo", "text on whatsapp", "whatsapp kar"
+            ],
+            Intent.WHATSAPP_UNREAD_COUNT: [
+                "how many whatsapp messages", "whatsapp unread count", "unread whatsapp",
+                "kitne whatsapp messages", "whatsapp messages kitne hain"
+            ],
+            Intent.INSTAGRAM_READ: [
+                "read my instagram messages", "read instagram", "check instagram messages",
+                "instagram messages suna", "instagram check karo", "show instagram messages",
+                "instagram dm check", "instagram dms padh"
+            ],
+            Intent.INSTAGRAM_SEND: [
+                "send instagram message", "instagram message bhej", "send message on instagram",
+                "instagram pe message bhejo", "dm on instagram", "instagram dm karo"
+            ],
+            Intent.INSTAGRAM_UNREAD_COUNT: [
+                "how many instagram messages", "instagram unread count", "unread instagram",
+                "kitne instagram messages", "instagram dms kitne hain"
+            ],
+            Intent.MESSAGES_CHECK: [
+                "check my messages", "read my messages", "check messages",
+                "messages check karo", "messages suna", "show messages",
+                "mera messages check karo", "kya messages hain"
+            ],
+            Intent.MESSAGES_UNREAD_COUNT: [
+                "how many messages", "unread messages count", "total unread messages",
+                "kitne messages hain", "messages kitne unread hain", "message count"
+            ],
+            Intent.REPLY_MESSAGE: [
+                "reply to", "reply karo", "jawab do", "send reply",
+                "reply bhej", "respond to"
+            ],
+            Intent.MARK_MESSAGES_READ: [
+                "mark all as read", "mark messages as read", "messages read kar",
+                "sab messages read kar do", "mark as read"
             ]
         }
         
@@ -121,7 +177,7 @@ class CommandParser:
         if self.neural_engine and self.neural_engine.is_loaded:
             neural_res = self.neural_engine.predict(text_lower)
             if neural_res and neural_res.intent != Intent.UNKNOWN and neural_res.confidence >= 0.40:
-                print(f"🧠 [JeanMax.pt Neural Engine] Matched Intent: {neural_res.intent.name} (Conf: {neural_res.confidence*100:.1f}%)")
+                logger.ai(f"Matched Intent: {neural_res.intent.name} (Conf: {neural_res.confidence*100:.1f}%)", module="NeuralEngine")
                 return neural_res
 
         # Check Spotify Add to Playlist
