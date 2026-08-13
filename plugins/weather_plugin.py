@@ -5,6 +5,7 @@ Demonstrates how to create a plugin for JeanMax
 
 from core.plugins.plugin_interface import IPlugin
 from typing import Dict, Any, Optional
+from assistance.utils.logger import logger
 
 
 class WeatherPlugin(IPlugin):
@@ -25,7 +26,7 @@ class WeatherPlugin(IPlugin):
     def initialize(self, config: Dict[str, Any]):
         """Initialize plugin with configuration"""
         self.api_key = config.get('api_key', None)
-        print(f"Weather plugin initialized")
+        logger.success("Weather plugin initialized", module="WeatherPlugin")
     
     def execute(self, command: str, params: Dict[str, Any]) -> Optional[Any]:
         """Execute plugin command"""
@@ -49,4 +50,4 @@ class WeatherPlugin(IPlugin):
     
     def shutdown(self):
         """Shutdown plugin and cleanup resources"""
-        print("Weather plugin shutdown")
+        logger.info("Weather plugin shutdown", module="WeatherPlugin")
