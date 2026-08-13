@@ -11,6 +11,7 @@ import urllib.parse
 import sys
 from typing import Tuple, Dict, Any, Optional, List
 from pathlib import Path
+from assistance.utils.logger import logger
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -41,7 +42,7 @@ class SpotifyController:
             try:
                 self.secret_manager = SecretManager()
             except Exception as e:
-                print(f"Failed to initialize secret manager: {e}")
+                logger.warning(f"Failed to initialize secret manager: {e}", module="SpotifyController")
         
         self._init_spotify_api()
         self._init_local_playlists()
@@ -49,7 +50,7 @@ class SpotifyController:
     def _init_spotify_api(self):
         """Initialize Spotipy client if credentials are present"""
         if not SPOTIPY_AVAILABLE:
-            print("ℹ Spotipy library not available. Using desktop MPRIS/URI controls.")
+            logger.info("Spotipy library not available. Using desktop MPRIS/URI controls.", module="SpotifyController")
             return
 
         # Try to get credentials from secure storage first
@@ -65,7 +66,7 @@ class SpotifyController:
                 if redirect_uri_stored:
                     redirect_uri = redirect_uri_stored
             except Exception as e:
-                print(f"Failed to retrieve credentials from secure storage: {e}")
+                logger.warning(f"Failed to retrieve credentials from secure storage: {e}", module="SpotifyController")
         
         # Fallback to environment variables
         if not client_id:
@@ -87,12 +88,12 @@ class SpotifyController:
                     open_browser=False
                 )
                 self.sp = spotipy.Spotify(auth_manager=auth_manager)
-                print("✓ Spotify Web API initialized successfully")
+                logger.success("Spotify Web API initialized successfully", module="SpotifyController")
             except Exception as e:
-                print(f"⚠️ Spotify Web API setup error: {e}. Will fallback to desktop controls.")
+                logger.warning(f"Spotify Web API setup error: {e}. Will fallback to desktop controls.", module="SpotifyController")
                 self.sp = None
         else:
-            print("ℹ Spotify API credentials not set in environment. Desktop controls active.")
+            logger.info("Spotify API credentials not set in environment. Desktop controls active.", module="SpotifyController")
 
     def _init_local_playlists(self):
         """Initialize local playlist JSON storage for fallback"""
@@ -102,7 +103,7 @@ class SpotifyController:
                 with open(self.playlists_file, 'w') as f:
                     json.dump({"playlists": {}}, f, indent=2)
         except Exception as e:
-            print(f"Local playlist init error: {e}")
+            logger.warning(f"Local playlist init error: {e}", module="SpotifyController")
 
     def _load_local_playlists(self) -> Dict[str, List[str]]:
         try:
@@ -119,7 +120,7 @@ class SpotifyController:
             with open(self.playlists_file, 'w') as f:
                 json.dump({"playlists": playlists}, f, indent=2)
         except Exception as e:
-            print(f"Error saving local playlists: {e}")
+            logger.warning(f"Error saving local playlists: {e}", module="SpotifyController")
 
     def _run_mpris_cmd(self, action: str) -> bool:
         """Run DBus or playerctl command for Spotify playback control"""
@@ -191,7 +192,7 @@ class SpotifyController:
                     subprocess.Popen(["xdg-open", track_uri], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     return True, f"Playing {display_name} on Spotify"
             except Exception as e:
-                print(f"Spotify API search failed: {e}")
+                logger.warning(f"Spotify API search failed: {e}", module="SpotifyController")
 
         # 2. Desktop fallback: open Spotify search URI or desktop URI
         encoded_query = urllib.parse.quote(clean_song)
@@ -229,7 +230,7 @@ class SpotifyController:
                     self.sp.start_playback()
                     return True, "Resumed Spotify playback"
             except Exception as e:
-                print(f"Spotify API track control error: {e}")
+                logger.warning(f"Spotify API track control error: {e}", module="SpotifyController")
 
         mpris_success = self._run_mpris_cmd(action)
         if mpris_success:
@@ -269,7 +270,7 @@ class SpotifyController:
                 )
                 return True, f"Successfully created new Spotify playlist '{clean_name}'"
             except Exception as e:
-                print(f"Spotify API create playlist failed: {e}")
+                logger.warning(f"Spotify API create playlist failed: {e}", module="SpotifyController")
 
         playlists = self._load_local_playlists()
         if clean_name in playlists:
@@ -322,7 +323,7 @@ class SpotifyController:
                 return True, f"Added '{track_title}' to playlist '{clean_playlist}' on Spotify"
 
             except Exception as e:
-                print(f"Spotify API add_to_playlist error: {e}")
+                logger.warning(f"Spotify API add_to_playlist error: {e}", module="SpotifyController")
 
         playlists = self._load_local_playlists()
         if clean_playlist not in playlists:
