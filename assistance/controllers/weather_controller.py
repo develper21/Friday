@@ -6,6 +6,7 @@ Fetches weather information including temperature, air quality, and pollution da
 import requests
 from typing import Optional, Dict
 from core.cache.response_cache import weather_cache, cached
+from assistance.utils.logger import logger
 
 
 class WeatherController:
@@ -17,7 +18,7 @@ class WeatherController:
             api_key: OpenWeatherMap API key (optional, will use wttr.in if not provided)
         """
         # Force use of wttr.in (free, no API key required) for reliability
-        print("Using wttr.in (free weather service) - no API key required")
+        logger.info("Using wttr.in (free weather service) - no API key required", module="WeatherController")
         self.api_key = None
         self.base_url = "https://api.openweathermap.org/data/2.5"
         
@@ -53,7 +54,7 @@ class WeatherController:
             response = requests.get(url, timeout=10)
             
             if response.status_code != 200:
-                print(f"✗ Weather API error: {response.status_code}")
+                logger.error(f"Weather API error: {response.status_code}", module="WeatherController")
                 return None
             
             data = response.json()
@@ -106,7 +107,7 @@ class WeatherController:
             return weather_info
             
         except Exception as e:
-            print(f"✗ Error fetching weather: {e}")
+            logger.error(f"Error fetching weather: {e}", module="WeatherController")
             return None
     
     def _get_air_quality(self, location: Optional[str] = None) -> Optional[Dict]:
@@ -148,7 +149,7 @@ class WeatherController:
             return air_quality
             
         except Exception as e:
-            print(f"✗Error fetching air quality: {e}")
+            logger.error(f"Error fetching air quality: {e}", module="WeatherController")
             return None
     
     def _get_openweathermap_weather(self, location: Optional[str] = None) -> Optional[Dict]:
@@ -167,7 +168,7 @@ class WeatherController:
             response = requests.get(url, timeout=10)
             
             if response.status_code != 200:
-                print(f"✗ Weather API error: {response.status_code}")
+                logger.error(f"Weather API error: {response.status_code}", module="WeatherController")
                 return None
             
             data = response.json()
@@ -189,7 +190,7 @@ class WeatherController:
             return weather_info
             
         except Exception as e:
-            print(f"✗ Error fetching weather: {e}")
+            logger.error(f"Error fetching weather: {e}", module="WeatherController")
             return None
     
     def format_weather_response(self, weather_info: Dict) -> str:
@@ -245,7 +246,7 @@ class WeatherController:
                 else:
                     response += "The air quality is very unhealthy. "
             except (KeyError, ValueError, TypeError) as e:
-                print(f"Error processing air quality data: {e}")
+                logger.error(f"Error processing air quality data: {e}", module="WeatherController")
                 pass
         
         response += "That's all the weather information I have for you, sir."
