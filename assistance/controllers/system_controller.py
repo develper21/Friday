@@ -5,11 +5,12 @@ Handles system power controls, volume, battery status, system stats, time/date, 
 
 import os
 import subprocess
-import time
-import datetime
 import webbrowser
+import datetime
 import psutil
+from typing import Optional
 from core.cache.response_cache import system_cache, cached
+from assistance.utils.logger import logger
 
 
 class SystemController:
@@ -30,7 +31,7 @@ class SystemController:
             status_str = "plugged in and charging" if plugged else "running on battery power"
             return f"Sir, your battery is at {percent} percent, and the system is {status_str}."
         except (AttributeError, OSError, psutil.Error) as e:
-            print(f"Error getting battery info: {e}")
+            logger.error(f"Error getting battery info: {e}", module="SystemController")
             return "Sorry sir, I failed to retrieve battery information."
 
     @cached(system_cache)
@@ -41,7 +42,7 @@ class SystemController:
             ram_usage = psutil.virtual_memory().percent
             return f"Sir, current CPU usage is {cpu_usage} percent, and RAM usage is at {ram_usage} percent."
         except (AttributeError, OSError, psutil.Error) as e:
-            print(f"Error getting system status: {e}")
+            logger.error(f"Error getting system status: {e}", module="SystemController")
             return "Sorry sir, I could not get system statistics."
 
     def get_time_date(self) -> str:
@@ -110,12 +111,12 @@ class SystemController:
         if delay is None:
             delay = self.shutdown_delay
             
-        print(f"⚠️  Powering off system in {delay} seconds...")
+        logger.warning(f"Powering off system in {delay} seconds...", module="SystemController")
         try:
             subprocess.run(["poweroff"], check=False)
             return True
         except Exception as e:
-            print(f"✗ Failed to power off: {e}")
+            logger.error(f"Failed to power off: {e}", module="SystemController")
             return False
     
     def restart(self, delay: int = None) -> bool:
@@ -123,12 +124,12 @@ class SystemController:
         if delay is None:
             delay = self.shutdown_delay
             
-        print(f"⚠️  Restarting system in {delay} seconds...")
+        logger.warning(f"Restarting system in {delay} seconds...", module="SystemController")
         try:
             subprocess.run(["reboot"], check=False)
             return True
         except Exception as e:
-            print(f"✗ Failed to restart: {e}")
+            logger.error(f"Failed to restart: {e}", module="SystemController")
             return False
     
     def lock_screen(self) -> bool:
@@ -142,22 +143,22 @@ class SystemController:
             for cmd in commands:
                 try:
                     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    print("✓ Screen locked")
+                    logger.success("Screen locked", module="SystemController")
                     return True
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     continue
             return False
         except Exception as e:
-            print(f"✗ Error locking screen: {e}")
+            logger.error(f"Error locking screen: {e}", module="SystemController")
             return False
     
     def suspend(self) -> bool:
         """Suspend the system"""
         try:
             subprocess.run(["systemctl", "suspend"], check=False)
-            print("✓ System suspending")
+            logger.success("System suspending", module="SystemController")
             return True
         except Exception as e:
-            print(f"✗ Failed to suspend: {e}")
+            logger.error(f"Failed to suspend: {e}", module="SystemController")
             return False
 
