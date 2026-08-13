@@ -13,6 +13,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import sys
+from assistance.utils.logger import logger
 
 # Add data directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'data'))
@@ -148,7 +149,7 @@ def load_existing_model(model_path, device):
             checkpoint.get("vectorizer_idf", {})
         )
     except Exception as e:
-        print(f"⚠️ Could not load existing model: {e}")
+        logger.warning(f"Could not load existing model: {e}", module="Training")
         return None, None, None, None
 
 
@@ -192,22 +193,22 @@ def train_model(fine_tune: bool = True):
     new_intents = get_new_intents(existing_intent_map, INTENT_MAP)
     
     if fine_tune and existing_checkpoint and new_intents:
-        print(f"🔄 Fine-tuning mode: Found {len(new_intents)} new intents to train")
-        print(f"   New intents: {new_intents}")
-        print(f"   Existing intents will be frozen to save training time")
+        logger.info(f"Fine-tuning mode: Found {len(new_intents)} new intents to train", module="Training")
+        logger.info(f"New intents: {new_intents}", module="Training")
+        logger.info("Existing intents will be frozen to save training time", module="Training")
     elif fine_tune and existing_checkpoint and not new_intents:
-        print("✅ No new intents detected. Model is already up-to-date.")
+        logger.success("No new intents detected. Model is already up-to-date.", module="Training")
         return
     else:
-        print("🚀 Training from scratch (no existing model or full retrain requested)")
+        logger.info("Training from scratch (no existing model or full retrain requested)", module="Training")
     
-    print("🚀 Initializing JeanMax PyTorch Multi-Task Training Pipeline...")
+    logger.info("Initializing JeanMax PyTorch Multi-Task Training Pipeline...", module="Training")
     
     # Create response mapping from conversational corpus
     all_responses = list(set([item[1] for item in CONVERSATIONAL_CORPUS]))
     RESPONSE_MAP = {i: response for i, response in enumerate(all_responses)}
     RESPONSE_TO_ID = {response: i for i, response in enumerate(all_responses)}
-    print(f"📊 Created response mapping with {len(RESPONSE_MAP)} unique responses")
+    logger.info(f"Created response mapping with {len(RESPONSE_MAP)} unique responses", module="Training")
     
     # Combine command corpus and conversational corpus
     command_texts = [item[0] for item in TRAINING_CORPUS]
@@ -224,7 +225,7 @@ def train_model(fine_tune: bool = True):
     
     # If fine-tuning, try to use existing vectorizer to maintain consistency
     if fine_tune and existing_vocab and existing_idf:
-        print("📝 Using existing vectorizer for consistency")
+        logger.info("Using existing vectorizer for consistency", module="Training")
         # Extend existing vocab with new tokens
         vectorizer.vocab = existing_vocab.copy()
         vectorizer.idf = existing_idf.copy()
@@ -249,7 +250,7 @@ def train_model(fine_tune: bool = True):
     num_intents = len(INTENT_MAP)
     num_responses = len(RESPONSE_MAP)
 
-    print(f"🖥️ Using training device: {device}")
+    logger.info(f"Using training device: {device}", module="Training")
 
     # Create model
     model = JeanMaxNeuralNet(input_dim, num_intents, num_responses).to(device)
@@ -264,32 +265,32 @@ def train_model(fine_tune: bool = True):
             for key in state_dict:
                 # Skip intent_head if number of intents changed
                 if "intent_head" in key and num_intents != existing_checkpoint.get("num_intents", 0):
-                    print(f"⚠️ Skipping {key} (intent count changed)")
+                    logger.warning(f"Skipping {key} (intent count changed)", module="Training")
                     continue
                 # Skip response_head if number of responses changed
                 if "response_head" in key and num_responses != existing_checkpoint.get("num_responses", 0):
-                    print(f"⚠️ Skipping {key} (response count changed)")
+                    logger.warning(f"Skipping {key} (response count changed)", module="Training")
                     continue
                 new_state_dict[key] = state_dict[key]
             
             model.load_state_dict(new_state_dict, strict=False)
-            print("✅ Loaded existing model weights for fine-tuning")
+            logger.success("Loaded existing model weights for fine-tuning", module="Training")
             
             # Freeze backbone layers (fc1, fc2) to preserve learned features
             for name, param in model.named_parameters():
                 if "fc1" in name or "fc2" in name or "ln1" in name or "ln2" in name:
                     param.requires_grad = False
-                    print(f"🔒 Frozen layer: {name}")
+                    logger.debug(f"Frozen layer: {name}", module="Training")
             
             # Only unfreeze heads for new intents/responses
             for name, param in model.named_parameters():
                 if "intent_head" in name or "response_head" in name:
                     param.requires_grad = True
-                    print(f"🔓 Unfrozen layer: {name}")
+                    logger.debug(f"Unfrozen layer: {name}", module="Training")
                     
         except Exception as e:
-            print(f"⚠️ Could not load existing weights: {e}")
-            print("🔄 Training from scratch instead")
+            logger.warning(f"Could not load existing weights: {e}", module="Training")
+            logger.info("Training from scratch instead", module="Training")
     
     intent_criterion = nn.CrossEntropyLoss(ignore_index=-1)  # Ignore -1 for response loss
     response_criterion = nn.CrossEntropyLoss(ignore_index=-1)  # Ignore -1 for intent loss
@@ -300,8 +301,8 @@ def train_model(fine_tune: bool = True):
 
     epochs = 50 if (fine_tune and existing_checkpoint) else 200  # Fewer epochs for fine-tuning
     model.train()
-    print(f"⏳ Training JeanMax Multi-Task Neural Model ({'Fine-tuning' if (fine_tune and existing_checkpoint) else 'Full training'} mode)...")
-    print(f"   Epochs: {epochs}, Learning Rate: {learning_rate}")
+    logger.info(f"Training JeanMax Multi-Task Neural Model ({'Fine-tuning' if (fine_tune and existing_checkpoint) else 'Full training'} mode)...", module="Training")
+    logger.info(f"Epochs: {epochs}, Learning Rate: {learning_rate}", module="Training")
 
     for epoch in range(1, epochs + 1):
         total_loss = 0.0
@@ -344,9 +345,9 @@ def train_model(fine_tune: bool = True):
         # Print more frequently for fine-tuning (every 10 epochs), less for full training (every 40)
         print_interval = 10 if (fine_tune and existing_checkpoint) else 40
         if epoch % print_interval == 0 or epoch == epochs:
-            print(f"  Epoch [{epoch}/{epochs}] - Loss: {total_loss/total:.4f} - Intent Acc: {intent_acc:.2f}% - Response Acc: {response_acc:.2f}%")
+            logger.info(f"Epoch [{epoch}/{epochs}] - Loss: {total_loss/total:.4f} - Intent Acc: {intent_acc:.2f}% - Response Acc: {response_acc:.2f}%", module="Training")
 
-    print("✅ Multi-Task Training completed!")
+    logger.success("Multi-Task Training completed!", module="Training")
 
     # ---------------------------------------------------------
     # 6. Save PyTorch Model Checkpoint (JeanMax.pt with conversational support)
@@ -368,7 +369,7 @@ def train_model(fine_tune: bool = True):
 
     torch.save(checkpoint, output_path_jean)
 
-    print(f"📦 Multi-Task Model saved successfully to: {output_path_jean}")
+    logger.success(f"Multi-Task Model saved successfully to: {output_path_jean}", module="Training")
 
     # Validation Test
     model.eval()
@@ -382,7 +383,8 @@ def train_model(fine_tune: bool = True):
         "stop tracking",
         "tracking status"
     ]
-    print("\n🔍 Running Quick Inference Validation:")
+    logger.separator("=", 40)
+    logger.info("Running Quick Inference Validation:", module="Training")
     for phrase in test_phrases:
         vec = vectorizer.transform(phrase)
         inp = torch.tensor(vec, dtype=torch.float32).unsqueeze(0).to(device)
@@ -397,7 +399,7 @@ def train_model(fine_tune: bool = True):
             intent = INTENT_MAP[intent_pred.item()]
             response = RESPONSE_MAP[response_pred.item()] if response_confidence.item() > 0.3 else "N/A"
             
-            print(f"  Phrase: '{phrase}' -> Intent: {intent} (Conf: {intent_confidence.item()*100:.1f}%) | Response: {response[:50]}... (Conf: {response_confidence.item()*100:.1f}%)")
+            logger.info(f"Phrase: '{phrase}' -> Intent: {intent} (Conf: {intent_confidence.item()*100:.1f}%) | Response: {response[:50]}... (Conf: {response_confidence.item()*100:.1f}%)", module="Training")
 
 if __name__ == "__main__":
     train_model()
