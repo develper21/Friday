@@ -114,12 +114,39 @@ class PhoneTrackingConfig:
 
 
 @dataclass
+class MessagingConfig:
+    """Messaging configuration for WhatsApp and Instagram"""
+    enabled: bool = False
+    whatsapp_enabled: bool = False
+    whatsapp_chrome_profile: str = "Default"
+    whatsapp_headless: bool = False
+    instagram_enabled: bool = False
+    instagram_username: Optional[str] = None
+    instagram_password: Optional[str] = None
+    instagram_session_file: str = "data/instagram_session.json"
+    message_monitor_enabled: bool = True
+    message_polling_interval: int = 30  # seconds
+    message_alerts_enabled: bool = True
+    unread_alert_threshold_days: int = 3
+    db_path: str = "data/messages.db"
+    
+    def __post_init__(self):
+        """Validate configuration values"""
+        if not 10 <= self.message_polling_interval <= 300:
+            raise ValueError(f"Message polling interval must be between 10 and 300 seconds, got {self.message_polling_interval}")
+        
+        if not 1 <= self.unread_alert_threshold_days <= 30:
+            raise ValueError(f"Unread alert threshold must be between 1 and 30 days, got {self.unread_alert_threshold_days}")
+
+
+@dataclass
 class Config:
     """Main configuration"""
     audio: AudioConfig
     speech: SpeechConfig
     weather: WeatherConfig
     phone_tracking: PhoneTrackingConfig = field(default_factory=PhoneTrackingConfig)
+    messaging: MessagingConfig = field(default_factory=MessagingConfig)
     shutdown_delay: int = 10
     
     def __post_init__(self):
@@ -246,6 +273,21 @@ class ConfigLoader:
                     auto_start_tracking=data.get('phone_tracking', {}).get('auto_start_tracking', False),
                     default_tracking_mode=data.get('phone_tracking', {}).get('default_tracking_mode', 'passive')
                 ),
+                messaging=MessagingConfig(
+                    enabled=data.get('messaging', {}).get('enabled', False),
+                    whatsapp_enabled=data.get('messaging', {}).get('whatsapp_enabled', False),
+                    whatsapp_chrome_profile=data.get('messaging', {}).get('whatsapp_chrome_profile', 'Default'),
+                    whatsapp_headless=data.get('messaging', {}).get('whatsapp_headless', False),
+                    instagram_enabled=data.get('messaging', {}).get('instagram_enabled', False),
+                    instagram_username=data.get('messaging', {}).get('instagram_username'),
+                    instagram_password=data.get('messaging', {}).get('instagram_password'),
+                    instagram_session_file=data.get('messaging', {}).get('instagram_session_file', 'data/instagram_session.json'),
+                    message_monitor_enabled=data.get('messaging', {}).get('message_monitor_enabled', True),
+                    message_polling_interval=data.get('messaging', {}).get('message_polling_interval', 30),
+                    message_alerts_enabled=data.get('messaging', {}).get('message_alerts_enabled', True),
+                    unread_alert_threshold_days=data.get('messaging', {}).get('unread_alert_threshold_days', 3),
+                    db_path=data.get('messaging', {}).get('db_path', 'data/messages.db')
+                ),
                 shutdown_delay=data.get('shutdown_delay', 10)
             )
             
@@ -263,6 +305,7 @@ class ConfigLoader:
                 api_key=self._get_api_key('OPENWEATHERMAP_API_KEY', 'openweathermap_api_key')
             ),
             phone_tracking=PhoneTrackingConfig(),
+            messaging=MessagingConfig(),
             shutdown_delay=10
         )
     
@@ -296,6 +339,21 @@ class ConfigLoader:
                 "enable_location_prediction": False,
                 "auto_start_tracking": False,
                 "default_tracking_mode": "passive"
+            },
+            "messaging": {
+                "enabled": False,
+                "whatsapp_enabled": False,
+                "whatsapp_chrome_profile": "Default",
+                "whatsapp_headless": False,
+                "instagram_enabled": False,
+                "instagram_username": null,
+                "instagram_password": null,
+                "instagram_session_file": "data/instagram_session.json",
+                "message_monitor_enabled": True,
+                "message_polling_interval": 30,
+                "message_alerts_enabled": True,
+                "unread_alert_threshold_days": 3,
+                "db_path": "data/messages.db"
             },
             "shutdown_delay": 10
         }
