@@ -3,6 +3,8 @@ Conversational Training Data
 Contains response templates and generation functions for conversational AI training.
 """
 
+from assistance.utils.logger import logger
+
 # Conversational Response Templates
 CONVERSATIONAL_RESPONSES = {
     "greeting": [
@@ -245,4 +247,4 @@ def generate_conversational_corpus():
 
 # Generate the full conversational corpus
 CONVERSATIONAL_CORPUS = generate_conversational_corpus()
-print(f"Generated {len(CONVERSATIONAL_CORPUS)} conversational training pairs")
+logger.info(f"Generated {len(CONVERSATIONAL_CORPUS)} conversational training pairs", module="ConversationalData")
