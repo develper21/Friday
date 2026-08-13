@@ -6,6 +6,7 @@ Detects and optimizes GPU/CPU usage for ML operations
 import torch
 import psutil
 from typing import Optional
+from assistance.utils.logger import logger
 
 
 class GPUManager:
@@ -27,14 +28,14 @@ class GPUManager:
                 
                 # Require at least 2GB free memory
                 if free_memory > 2 * 1024 * 1024 * 1024:
-                    print(f"✓ GPU detected with {free_memory / (1024**3):.1f}GB free memory")
+                    logger.success(f"GPU detected with {free_memory / (1024**3):.1f}GB free memory", module="GPUManager")
                     return "cuda"
                 else:
-                    print(f"⚠️ GPU available but insufficient memory ({free_memory / (1024**3):.1f}GB)")
+                    logger.warning(f"GPU available but insufficient memory ({free_memory / (1024**3):.1f}GB)", module="GPUManager")
             except Exception as e:
-                print(f"⚠️ GPU detection error: {e}")
+                logger.warning(f"GPU detection error: {e}", module="GPUManager")
         
-        print("Using CPU for computation")
+        logger.info("Using CPU for computation", module="GPUManager")
         return "cpu"
     
     @staticmethod
@@ -69,13 +70,12 @@ class GPUManager:
     def print_memory_stats():
         """Print current memory statistics"""
         stats = GPUManager.get_memory_usage()
-        print("\n=== Memory Statistics ===")
-        print(f"CPU Usage: {stats['cpu_percent']}%")
-        print(f"RAM Usage: {stats['ram_used_gb']:.1f}GB / {stats['ram_total_gb']:.1f}GB ({stats['ram_percent']:.1f}%)")
+        logger.separator("=", 30)
+        logger.info(f"CPU Usage: {stats['cpu_percent']}%", module="MemoryStats")
+        logger.info(f"RAM Usage: {stats['ram_used_gb']:.1f}GB / {stats['ram_total_gb']:.1f}GB ({stats['ram_percent']:.1f}%)", module="MemoryStats")
         
         if "gpu_used_gb" in stats:
-            print(f"GPU Usage: {stats['gpu_used_gb']:.1f}GB / {stats['gpu_total_gb']:.1f}GB ({stats['gpu_percent']:.1f}%)")
-        print()
+            logger.info(f"GPU Usage: {stats['gpu_used_gb']:.1f}GB / {stats['gpu_total_gb']:.1f}GB ({stats['gpu_percent']:.1f}%)", module="MemoryStats")
     
     @staticmethod
     def optimize_for_inference():
@@ -89,6 +89,6 @@ class GPUManager:
             # Disable gradient calculation for inference
             torch.set_grad_enabled(False)
             
-            print("✓ PyTorch optimized for GPU inference")
+            logger.success("PyTorch optimized for GPU inference", module="GPUManager")
         else:
-            print("Using CPU, PyTorch optimizations not applicable")
+            logger.info("Using CPU, PyTorch optimizations not applicable", module="GPUManager")
