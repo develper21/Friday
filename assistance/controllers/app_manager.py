@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import difflib
+from assistance.utils.logger import logger
 
 
 class SecurityError(Exception):
@@ -136,9 +137,9 @@ class AppManager:
                     )
                     for app in cache_data['apps']
                 ]
-            print("✓ Loaded app index from cache")
+            logger.success("Loaded app index from cache", module="AppManager")
         except Exception as e:
-            print(f"⚠️ Failed to load cache: {e}, rebuilding...")
+            logger.warning(f"Failed to load cache: {e}, rebuilding...", module="AppManager")
             self._build_index()
     
     def _save_to_cache(self):
@@ -163,9 +164,9 @@ class AppManager:
             
             with open(self.CACHE_FILE, 'w') as f:
                 json.dump(cache_data, f, indent=2)
-            print("✓ Saved app index to cache")
+            logger.success("Saved app index to cache", module="AppManager")
         except Exception as e:
-            print(f"⚠️ Failed to save cache: {e}")
+            logger.warning(f"Failed to save cache: {e}", module="AppManager")
     
     def _load_or_build_index(self):
         """Load from cache or build new index"""
@@ -181,7 +182,7 @@ class AppManager:
             self.CACHE_FILE.unlink()
         self._build_index()
         self._save_to_cache()
-        print("✓ Cache invalidated and rebuilt")
+        logger.success("Cache invalidated and rebuilt", module="AppManager")
 
     def _clean_exec_command(self, exec_str: str) -> str:
         """Strip desktop field codes like %f, %F, %u, %U, %k, %i, etc."""
@@ -274,7 +275,7 @@ class AppManager:
                     except Exception:
                         continue
 
-        print(f"✓ Indexed {len(self.apps_index)} system applications.")
+        logger.success(f"Indexed {len(self.apps_index)} system applications.", module="AppManager")
 
     def find_app(self, query: str) -> Optional[AppEntry]:
         """
@@ -337,7 +338,7 @@ class AppManager:
         # 1. Try launching using desktop entry via gtk-launch or gio
         if app:
             desktop_id = app.desktop_id
-            print(f"Found app entry: {app.name} ({desktop_id})")
+            logger.info(f"Found app entry: {app.name} ({desktop_id})", module="AppManager")
 
             # Try gtk-launch
             try:
@@ -345,7 +346,7 @@ class AppManager:
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,
                                  start_new_session=True)
-                print(f"✓ Launched {app.name} via gtk-launch")
+                logger.success(f"Launched {app.name} via gtk-launch", module="AppManager")
                 return True
             except Exception:
                 pass
@@ -356,7 +357,7 @@ class AppManager:
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,
                                  start_new_session=True)
-                print(f"✓ Launched {app.name} via gio launch")
+                logger.success(f"Launched {app.name} via gio launch", module="AppManager")
                 return True
             except Exception:
                 pass
@@ -368,10 +369,10 @@ class AppManager:
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,
                                  start_new_session=True)
-                print(f"✓ Launched {app.name} via command line")
+                logger.success(f"Launched {app.name} via command line", module="AppManager")
                 return True
             except Exception as e:
-                print(f"✗ Failed launching {app.exec_cmd}: {e}")
+                logger.error(f"Failed launching {app.exec_cmd}: {e}", module="AppManager")
 
         # Fallback: check if raw command exists in system PATH
         fallback_cmd = app_name.lower().strip().replace(" ", "-")
@@ -382,12 +383,12 @@ class AppManager:
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,
                                  start_new_session=True)
-                print(f"✓ Opened {fallback_cmd} from PATH")
+                logger.success(f"Opened {fallback_cmd} from PATH", module="AppManager")
                 return True
         except Exception:
             pass
 
-        print(f"✗ Could not find or launch application: '{app_name}'")
+        logger.error(f"Could not find or launch application: '{app_name}'", module="AppManager")
         return False
 
     def close_app(self, app_name: str) -> bool:
@@ -428,7 +429,7 @@ class AppManager:
                     pass
 
             if not pids_killed:
-                print(f"✗ No running process found for '{app_name}'")
+                logger.warning(f"No running process found for '{app_name}'", module="AppManager")
                 return False
 
             # Kill processes
@@ -447,16 +448,16 @@ class AppManager:
                 except Exception:
                     pass
 
-            print(f"✓ Closed '{app_name}' ({len(pids_killed)} processes stopped)")
+            logger.success(f"Closed '{app_name}' ({len(pids_killed)} processes stopped)", module="AppManager")
             return True
 
         except Exception as e:
-            print(f"✗ Error closing {app_name}: {e}")
+            logger.error(f"Error closing {app_name}: {e}", module="AppManager")
             return False
 
     def close_all_apps(self) -> bool:
         """Close all user applications"""
-        print("Closing user applications...")
+        logger.info("Closing user applications...", module="AppManager")
         closed_count = 0
 
         current_pid = os.getpid()
@@ -476,7 +477,7 @@ class AppManager:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
-        print(f"✓ Closed {closed_count} user application process(es)")
+        logger.success(f"Closed {closed_count} user application process(es)", module="AppManager")
         return True
 
     def is_running(self, app_name: str) -> bool:
