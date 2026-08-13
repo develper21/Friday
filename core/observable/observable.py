@@ -4,6 +4,7 @@ Implements observer pattern for state change notifications
 """
 
 from typing import List, Callable
+from assistance.utils.logger import logger
 
 
 class Observable:
@@ -43,7 +44,7 @@ class Observable:
             try:
                 observer(*args, **kwargs)
             except Exception as e:
-                print(f"Observer notification error: {e}")
+                logger.error(f"Observer notification error: {e}", module="Observable")
 
 
 class AssistantState(Observable):
