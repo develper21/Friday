@@ -25,3 +25,4 @@ qt.conf
 src/jarvis/_version.py
 .reasonix/
 package-lock.json
+logs
