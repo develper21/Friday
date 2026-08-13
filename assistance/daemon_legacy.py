@@ -8,6 +8,7 @@ import time
 import threading
 import numpy as np
 from typing import Optional
+from .utils.logger import logger
 
 from .audio.input_handler import AudioInputHandler
 from .audio.vad import VoiceActivityDetector
@@ -37,7 +38,7 @@ class VoiceAssistantDaemon:
             
         self.config = config
         
-        print("Initializing modules...")
+        logger.system("Initializing modules...", module="DaemonLegacy")
         
         # Audio input
         self.audio_handler = AudioInputHandler(
@@ -99,9 +100,9 @@ class VoiceAssistantDaemon:
             )
             
             if self.phone_tracking_http_server.start():
-                print(f"✓ Phone tracking HTTP server started on {config.phone_tracking.http_server_host}:{config.phone_tracking.http_server_port}")
+                logger.success(f"Phone tracking HTTP server started on {config.phone_tracking.http_server_host}:{config.phone_tracking.http_server_port}", module="DaemonLegacy")
             else:
-                print("✗ Failed to start phone tracking HTTP server")
+                logger.error("Failed to start phone tracking HTTP server", module="DaemonLegacy")
                 self.phone_tracking_http_server = None
                 
             # Auto-start tracking if configured
@@ -113,7 +114,7 @@ class VoiceAssistantDaemon:
                     mode = TrackingMode.CONTINUOUS
                 
                 self.phone_tracking_controller.start_tracking(mode)
-                print(f"✓ Phone tracking auto-started in {config.phone_tracking.default_tracking_mode} mode")
+                logger.success(f"Phone tracking auto-started in {config.phone_tracking.default_tracking_mode} mode", module="DaemonLegacy")
         else:
             self.phone_tracking_controller = None
             self.phone_tracking_http_server = None
@@ -125,7 +126,7 @@ class VoiceAssistantDaemon:
         self.is_listening = False
         self.stop_requested = False
         
-        print("✓ All Jean Max modules initialized successfully!")
+        logger.success("All Jean Max modules initialized successfully!", module="DaemonLegacy")
 
     def _is_interruption(self, text: str) -> bool:
         """
@@ -144,10 +145,10 @@ class VoiceAssistantDaemon:
         """
         Stop current speech and ask the user why they stopped Jean Max
         """
-        print("⏸ Interruption detected! Stopping speech...")
+        logger.warning("Interruption detected! Stopping speech...", module="DaemonLegacy")
         self.tts.stop()
         response_text = "What happening, i can hear tell me why are you stopping me ?"
-        print(f"[Jean Max]: {response_text}")
+        logger.speech(response_text, module="DaemonLegacy")
         self.tts.speak(response_text, blocking=True)
     
     def _phone_tracking_alert_callback(self, alert):
@@ -156,7 +157,7 @@ class VoiceAssistantDaemon:
         Handles location change alerts via TTS
         """
         try:
-            print(f"📱 Phone Tracking Alert: {alert.message}")
+            logger.info(f"Phone Tracking Alert: {alert.message}", module="DaemonLegacy")
             
             # Only speak critical and warning alerts, not info alerts in continuous mode
             if alert.severity.value in ['critical', 'warning']:
@@ -164,7 +165,7 @@ class VoiceAssistantDaemon:
             elif alert.severity.value == 'info' and 'location update' not in alert.message.lower():
                 self.tts.speak(alert.message)
         except Exception as e:
-            print(f"Error in phone tracking alert callback: {e}")
+            logger.error(f"Error in phone tracking alert callback: {e}", module="DaemonLegacy")
 
     def listen_and_process(self) -> bool:
         """
@@ -177,7 +178,7 @@ class VoiceAssistantDaemon:
                 audio = self.audio_handler.record(4.0)
                 return self._process_audio(audio)
         except Exception as e:
-            print(f"✗ Listening error: {e}")
+            logger.error(f"Listening error: {e}", module="DaemonLegacy")
             return False
 
     def _listen_with_vad(self) -> bool:
@@ -193,7 +194,7 @@ class VoiceAssistantDaemon:
         speech_detected = False
         max_duration = 15  # Maximum 15s recording
 
-        print("🎤 Listening...")
+        logger.listening("Listening...", module="DaemonLegacy")
         self.is_listening = True
 
         def audio_callback(indata, frames, time_info, status):
@@ -210,7 +211,7 @@ class VoiceAssistantDaemon:
                     if self.vad.is_speech(vad_frame):
                         if not speech_detected:
                             speech_detected = True
-                            print("👂 Hearing voice...")
+                            logger.listening("Hearing voice...", module="DaemonLegacy")
                         silence_frames = 0
                     else:
                         if speech_detected:
@@ -231,7 +232,7 @@ class VoiceAssistantDaemon:
                         break
                     
                     if speech_detected and silence_frames >= max_silence_frames:
-                        print("🔇 Speech finished")
+                        logger.listening("Speech finished", module="DaemonLegacy")
                         break
                     
                     sd.sleep(30)
@@ -246,7 +247,7 @@ class VoiceAssistantDaemon:
 
         except Exception as e:
             self.is_listening = False
-            print(f"VAD listening error: {e}")
+            logger.error(f"VAD listening error: {e}", module="DaemonLegacy")
             audio = self.audio_handler.record(4.0)
             return self._process_audio(audio)
 
@@ -254,13 +255,13 @@ class VoiceAssistantDaemon:
         """
         Transcribe audio and execute parsed command with conversational responses
         """
-        print("⚡ Transcribing speech...")
+        logger.transcribing("Transcribing speech...", module="DaemonLegacy")
         text = self.speech_recognizer.transcribe(audio, source_sample_rate=self.config.audio.sample_rate)
 
         if not text or len(text.strip()) < 2:
             return False
 
-        print(f"📝 Heard: \"{text}\"")
+        logger.info(f"Heard: \"{text}\"", module="DaemonLegacy")
 
         # Check interruption command while listening
         if self._is_interruption(text):
@@ -272,7 +273,7 @@ class VoiceAssistantDaemon:
 
         # If conversational response is available, speak it
         if conversational_response:
-            print(f"[Jean Max]: {conversational_response}")
+            logger.speech(conversational_response, module="DaemonLegacy")
             self.tts.speak(conversational_response)
         
         # If command is available, execute it
@@ -296,7 +297,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.OPEN_APP:
                 if entity:
-                    print(f"Opening application: {entity}")
+                    logger.command(f"Opening application: {entity}", module="DaemonLegacy")
                     success = self.app_manager.open_app(entity)
                     if success:
                         self.tts.speak(f"Yes sir, opening {entity}")
@@ -309,7 +310,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.CLOSE_APP:
                 if entity:
-                    print(f"Closing application: {entity}")
+                    logger.command(f"Closing application: {entity}", module="DaemonLegacy")
                     success = self.app_manager.close_app(entity)
                     if success:
                         self.tts.speak(f"Yes sir, closing {entity}")
@@ -334,7 +335,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.WEATHER:
                 location = entity if entity else None
-                print(f"Fetching weather for: {location if location else 'current location'}")
+                logger.info(f"Fetching weather for: {location if location else 'current location'}", module="DaemonLegacy")
                 weather_info = self.weather_controller.get_weather(location)
                 if weather_info:
                     weather_response = self.weather_controller.format_weather_response(weather_info)
@@ -381,7 +382,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.SPOTIFY_PLAY:
                 if entity:
-                    print(f"Playing song on Spotify: {entity}")
+                    logger.command(f"Playing song on Spotify: {entity}", module="DaemonLegacy")
                     success, msg = self.spotify_controller.play_song(entity)
                     self.tts.speak(msg)
                     return success
@@ -393,7 +394,7 @@ class VoiceAssistantDaemon:
                 song = entity
                 playlist = command.playlist_entity
                 if song and playlist:
-                    print(f"Adding song '{song}' to playlist '{playlist}'")
+                    logger.command(f"Adding song '{song}' to playlist '{playlist}'", module="DaemonLegacy")
                     success, msg = self.spotify_controller.add_to_playlist(song, playlist)
                     self.tts.speak(msg)
                     return success
@@ -403,7 +404,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.SPOTIFY_CREATE_PLAYLIST:
                 if entity:
-                    print(f"Creating Spotify playlist: {entity}")
+                    logger.command(f"Creating Spotify playlist: {entity}", module="DaemonLegacy")
                     success, msg = self.spotify_controller.create_playlist(entity)
                     self.tts.speak(msg)
                     return success
@@ -437,7 +438,7 @@ class VoiceAssistantDaemon:
                 return True
 
             elif intent == Intent.TERMINAL_EXEC:
-                print("💻 Processing Terminal Command...")
+                logger.command("Processing Terminal Command...", module="DaemonLegacy")
                 task_text = entity if entity else command.original_text if hasattr(command, 'original_text') else "update system"
                 success, response_msg = self.terminal_controller.execute_task_by_phrase(task_text)
                 self.tts.speak(response_msg)
@@ -453,7 +454,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.PHONE_LOCATION:
                 if self.phone_tracking_controller:
-                    print("📍 Fetching phone location...")
+                    logger.info("Fetching phone location...", module="DaemonLegacy")
                     location = self.phone_tracking_controller.get_current_location()
                     response = self.phone_tracking_controller.format_location_response(location)
                     self.tts.speak(response)
@@ -464,7 +465,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.START_TRACKING:
                 if self.phone_tracking_controller:
-                    print("🚀 Starting phone tracking...")
+                    logger.info("Starting phone tracking...", module="DaemonLegacy")
                     # Determine tracking mode based on command
                     mode = TrackingMode.ACTIVE
                     if entity and "continuous" in entity.lower():
@@ -485,7 +486,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.STOP_TRACKING:
                 if self.phone_tracking_controller:
-                    print("🛑 Stopping phone tracking...")
+                    logger.info("Stopping phone tracking...", module="DaemonLegacy")
                     success = self.phone_tracking_controller.stop_tracking()
                     if success:
                         self.tts.speak("Yes sir, phone tracking stopped")
@@ -498,7 +499,7 @@ class VoiceAssistantDaemon:
 
             elif intent == Intent.TRACKING_STATUS:
                 if self.phone_tracking_controller:
-                    print("📊 Getting phone tracking status...")
+                    logger.info("Getting phone tracking status...", module="DaemonLegacy")
                     status = self.phone_tracking_controller.get_tracking_status()
                     self.tts.speak(status)
                     return True
@@ -507,52 +508,51 @@ class VoiceAssistantDaemon:
                     return False
 
             elif intent == Intent.UNKNOWN:
-                print("✗ Command not recognized")
+                logger.warning("Command not recognized", module="DaemonLegacy")
                 self._print_help()
                 return False
 
         except Exception as e:
-            print(f"✗ Execution error: {e}")
+            logger.error(f"Execution error: {e}", module="DaemonLegacy")
             return False
 
         return False
 
     def _print_help(self):
         """Print available commands"""
-        print("\n📖 Available Jean Max Commands:")
-        print("  - open [app]             (e.g., 'open chrome', 'open vs code', 'open spotify')")
-        print("  - play [song name]       (e.g., 'play Bohemian Rhapsody', 'play song Starboy')")
-        print("  - add [song] to [playlist] (e.g., 'add Believer to Workout playlist')")
-        print("  - create playlist [name] (e.g., 'create playlist Chill Hits')")
-        print("  - next track / previous track / pause music / resume music")
-        print("  - close [app]            (e.g., 'close firefox', 'close code', 'close spotify')")
-        print("  - close all apps")
-        print("  - close all tabs")
-        print("  - weather [location]     (e.g., 'weather', 'weather delhi')")
-        print("  - wait jean / stop jean  (Interrupts Jean Max when speaking)")
-        print("  - battery status")
-        print("  - system status")
-        print("  - what time is it / date")
-        print("  - volume up / volume down / mute")
-        print("  - search google for [query] / search youtube for [query]")
-        print("  - update system / upgrade linux (e.g., 'update system', 'upgrade packages')")
-        print("  - run command [cmd]      (e.g., 'run command htop', 'run command git status')")
-        print("  - install [package]      (e.g., 'install vlc', 'install htop')")
-        print("  - power off / restart")
-        print("  📱 Phone Tracking:")
-        print("    - where is my phone / phone location / mera phone kidhar hai")
-        print("    - start tracking / phone tracking start karo / track my phone")
-        print("    - stop tracking / phone tracking stop karo")
-        print("    - tracking status / tracking status batao\n")
+        logger.print_raw("\n📖 Available Jean Max Commands:")
+        logger.print_raw("  - open [app]             (e.g., 'open chrome', 'open vs code', 'open spotify')")
+        logger.print_raw("  - play [song name]       (e.g., 'play Bohemian Rhapsody', 'play song Starboy')")
+        logger.print_raw("  - add [song] to [playlist] (e.g., 'add Believer to Workout playlist')")
+        logger.print_raw("  - create playlist [name] (e.g., 'create playlist Chill Hits')")
+        logger.print_raw("  - next track / previous track / pause music / resume music")
+        logger.print_raw("  - close [app]            (e.g., 'close firefox', 'close code', 'close spotify')")
+        logger.print_raw("  - close all apps")
+        logger.print_raw("  - close all tabs")
+        logger.print_raw("  - weather [location]     (e.g., 'weather', 'weather delhi')")
+        logger.print_raw("  - wait jean / stop jean  (Interrupts Jean Max when speaking)")
+        logger.print_raw("  - battery status")
+        logger.print_raw("  - system status")
+        logger.print_raw("  - what time is it / date")
+        logger.print_raw("  - volume up / volume down / mute")
+        logger.print_raw("  - search google for [query] / search youtube for [query]")
+        logger.print_raw("  - update system / upgrade linux (e.g., 'update system', 'upgrade packages')")
+        logger.print_raw("  - run command [cmd]      (e.g., 'run command htop', 'run command git status')")
+        logger.print_raw("  - install [package]      (e.g., 'install vlc', 'install htop')")
+        logger.print_raw("  - power off / restart")
+        logger.print_raw("  📱 Phone Tracking:")
+        logger.print_raw("    - where is my phone / phone location / mera phone kidhar hai")
+        logger.print_raw("    - start tracking / phone tracking start karo / track my phone")
+        logger.print_raw("    - stop tracking / phone tracking stop karo")
+        logger.print_raw("    - tracking status / tracking status batao\n")
 
     def run(self):
         """Main event loop"""
-        print("\n" + "="*60)
-        print("🎙️  Jean Max Voice Assistant Active!")
-        print("="*60)
+        logger.separator("=", 60)
+        logger.header("Jean Max Voice Assistant Active!", 60)
         
         greeting = self.tts.get_greeting() + ". Jean Max is online."
-        print(f"\n{greeting}\n")
+        logger.print_raw(f"\n{greeting}\n")
         self.tts.speak(greeting)
         
         self._print_help()
@@ -567,7 +567,7 @@ class VoiceAssistantDaemon:
                 time.sleep(0.1)
 
         except KeyboardInterrupt:
-            print("\n\n👋 Goodbye!")
+            logger.print_raw("\n\n👋 Goodbye!")
             self.tts.speak("Goodbye sir")
             sys.exit(0)
 
