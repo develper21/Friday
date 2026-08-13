@@ -11,7 +11,7 @@ import atexit
 import numpy as np
 from typing import Optional
 
-from core.di.service_config import configure_container, configure_phone_tracking
+from core.di.service_config import configure_container, configure_phone_tracking, configure_messaging
 from core.events.event_bus import EventBus, EventType
 from core.observable.observable import AssistantState
 from core.interfaces.audio_service import IAudioService, IVoiceActivityDetector
@@ -21,9 +21,11 @@ from core.interfaces.controller_service import (
     IAppController, ISystemController, IWeatherController,
     ISpotifyController, ITerminalController, IPhoneTrackingController
 )
+from core.interfaces.messaging_service import IMessagingService, IMessageMonitor
 from assistance.config.settings import ConfigLoader, Config
 from assistance.nlp.parser import Intent
 from assistance.controllers.phone_tracking_controller import TrackingMode
+from assistance.controllers.messaging_controller import MessagingController
 from assistance.utils.logger import logger
 
 
@@ -115,11 +117,72 @@ class VoiceAssistantDaemonRefactored:
                 self.phone_tracking_controller.start_tracking(mode)
                 logger.success(f"Phone tracking auto-started in {config.phone_tracking.default_tracking_mode} mode")
         
+        # Messaging services (optional)
+        self.messaging_controller = None
+        self.whatsapp_service = None
+        self.instagram_service = None
+        self.message_monitor = None
+        self._unread_alert_thread = None
+        self._unread_alert_stop_event = None
+        
+        if hasattr(config, 'messaging') and config.messaging.enabled:
+            messaging_config = {
+                'whatsapp_enabled': config.messaging.whatsapp_enabled,
+                'whatsapp_chrome_profile': config.messaging.whatsapp_chrome_profile,
+                'whatsapp_headless': config.messaging.whatsapp_headless,
+                'instagram_enabled': config.messaging.instagram_enabled,
+                'instagram_username': config.messaging.instagram_username,
+                'instagram_password': config.messaging.instagram_password,
+                'instagram_session_file': config.messaging.instagram_session_file,
+                'message_monitor_enabled': config.messaging.message_monitor_enabled,
+                'message_polling_interval': config.messaging.message_polling_interval,
+                'message_alerts_enabled': config.messaging.message_alerts_enabled,
+                'db_path': config.messaging.db_path
+            }
+            configure_messaging(self.container, messaging_config)
+            
+            # Try to resolve messaging services
+            try:
+                self.whatsapp_service = self.container.resolve(IMessagingService, name='whatsapp')
+            except:
+                pass
+            
+            try:
+                self.instagram_service = self.container.resolve(IMessagingService, name='instagram')
+            except:
+                pass
+            
+            try:
+                self.message_monitor = self.container.resolve(IMessageMonitor)
+            except:
+                pass
+            
+            # Create messaging controller
+            self.messaging_controller = MessagingController(
+                whatsapp_service=self.whatsapp_service,
+                instagram_service=self.instagram_service,
+                message_monitor=self.message_monitor,
+                tts_service=self.tts_service
+            )
+            
+            # Start message monitor if enabled
+            if self.message_monitor:
+                # Register callback for new message alerts
+                self.message_monitor.register_new_message_callback(self._new_message_alert_callback)
+                self.message_monitor.start_monitoring()
+                logger.success("Message monitoring started")
+            
+            logger.success("Messaging services initialized")
+        
         # Setup event subscribers
         self._setup_event_subscribers()
         
         # State tracking
         self.stop_requested = False
+        
+        # Start unread message alert checker if messaging is enabled
+        if self.messaging_controller and hasattr(config, 'messaging') and config.messaging.enabled:
+            self._start_unread_alert_checker(config.messaging.unread_alert_threshold_days)
         
         # Register cleanup handlers
         atexit.register(self._cleanup)
@@ -178,17 +241,72 @@ class VoiceAssistantDaemonRefactored:
         logger.speech(f"[Jean Max]: {response_text}")
         self.tts_service.speak(response_text, blocking=True)
     
-    def _phone_tracking_alert_callback(self, alert):
-        """Callback for phone tracking alerts"""
-        try:
-            logger.warning(f"Phone Tracking Alert: {alert.message}")
-            
-            if alert.severity.value in ['critical', 'warning']:
-                self.tts_service.speak(alert.message)
-            elif alert.severity.value == 'info' and 'location update' not in alert.message.lower():
-                self.tts_service.speak(alert.message)
-        except Exception as e:
-            logger.error(f"Error in phone tracking alert callback: {e}")
+    def _phone_tracking_alert_callback(self, location_data: dict):
+        """
+        Callback for phone tracking alerts
+        Called when significant location change is detected
+        """
+        logger.warning(f"Phone location alert: {location_data}")
+        
+        # Format alert message
+        address = location_data.get('address', 'Unknown location')
+        alert_msg = f"Sir, your phone has moved to {address}"
+        
+        # Speak alert if not interrupted
+        if not self.state.is_speaking:
+            self.tts_service.speak(alert_msg)
+    
+    def _new_message_alert_callback(self, messages: List):
+        """
+        Callback for new message alerts
+        Called when new messages are detected by the message monitor
+        """
+        if not messages:
+            return
+        
+        logger.info(f"New message alert: {len(messages)} messages detected")
+        
+        # Group messages by platform
+        whatsapp_count = sum(1 for m in messages if hasattr(m, 'platform') and m.platform.value == 'whatsapp')
+        instagram_count = sum(1 for m in messages if hasattr(m, 'platform') and m.platform.value == 'instagram')
+        
+        alert_msg = f"Sir, you have {len(messages)} new messages"
+        
+        if whatsapp_count > 0:
+            alert_msg += f". {whatsapp_count} on WhatsApp"
+        if instagram_count > 0:
+            alert_msg += f". {instagram_count} on Instagram"
+        
+        # Speak alert if not interrupted
+        if not self.state.is_speaking:
+            self.tts_service.speak(alert_msg)
+    
+    def _start_unread_alert_checker(self, threshold_days: int):
+        """Start background thread for unread message alerts"""
+        self._unread_alert_stop_event = threading.Event()
+        
+        def _unread_alert_loop():
+            while not self._unread_alert_stop_event.is_set():
+                try:
+                    # Check for unread messages not viewed for threshold days
+                    if self.messaging_controller:
+                        success, response = self.messaging_controller.check_messages_not_viewed(threshold_days)
+                        if success and response:
+                            logger.info(f"Unread message check: {response}")
+                    
+                    # Check every hour
+                    self._unread_alert_stop_event.wait(3600)
+                except Exception as e:
+                    logger.error(f"Error in unread alert checker: {e}")
+                    self._unread_alert_stop_event.wait(300)  # Wait 5 minutes on error
+        
+        self._unread_alert_thread = threading.Thread(
+            target=_unread_alert_loop,
+            daemon=True,
+            name="UnreadAlertChecker"
+        )
+        self._unread_alert_thread.start()
+        logger.success(f"Unread message alert checker started (threshold: {threshold_days} days)")
 
     def listen_and_process(self) -> bool:
         """Listen for voice command using VAD continuous listening"""
@@ -401,7 +519,7 @@ class VoiceAssistantDaemonRefactored:
 
             elif intent == Intent.SPOTIFY_PLAY:
                 if entity:
-                    print(f"Playing song on Spotify: {entity}")
+                    logger.command(f"Playing song on Spotify: {entity}", module="Daemon")
                     success, msg = self.spotify_controller.play_song(entity)
                     self.tts_service.speak(msg)
                     return success
@@ -503,6 +621,125 @@ class VoiceAssistantDaemonRefactored:
                     self.tts_service.speak("Sorry sir, phone tracking is not enabled")
                     return False
 
+            # Messaging commands
+            elif intent == Intent.WHATSAPP_READ:
+                if self.messaging_controller:
+                    logger.command("Reading WhatsApp messages...")
+                    success, response = self.messaging_controller.read_whatsapp_messages()
+                    self.messaging_controller.update_last_check_time()
+                    return success
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.WHATSAPP_SEND:
+                if self.messaging_controller:
+                    logger.command("Sending WhatsApp message...")
+                    # Extract recipient and message from entity
+                    if entity:
+                        parts = entity.split(' ', 1)
+                        recipient = parts[0]
+                        text = parts[1] if len(parts) > 1 else ""
+                        success, response = self.messaging_controller.send_whatsapp_message(recipient, text)
+                        if not success:
+                            self.tts_service.speak(response)
+                        return success
+                    else:
+                        self.tts_service.speak("Sir, please specify the recipient and message")
+                        return False
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.WHATSAPP_UNREAD_COUNT:
+                if self.messaging_controller:
+                    logger.command("Getting WhatsApp unread count...")
+                    success, response = self.messaging_controller.get_whatsapp_unread_count()
+                    return success
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.INSTAGRAM_READ:
+                if self.messaging_controller:
+                    logger.command("Reading Instagram messages...")
+                    success, response = self.messaging_controller.read_instagram_messages()
+                    self.messaging_controller.update_last_check_time()
+                    return success
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.INSTAGRAM_SEND:
+                if self.messaging_controller:
+                    logger.command("Sending Instagram message...")
+                    if entity:
+                        parts = entity.split(' ', 1)
+                        recipient = parts[0]
+                        text = parts[1] if len(parts) > 1 else ""
+                        success, response = self.messaging_controller.send_instagram_message(recipient, text)
+                        if not response:
+                            self.tts_service.speak(response)
+                        return success
+                    else:
+                        self.tts_service.speak("Sir, please specify the recipient and message")
+                        return False
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.INSTAGRAM_UNREAD_COUNT:
+                if self.messaging_controller:
+                    logger.command("Getting Instagram unread count...")
+                    success, response = self.messaging_controller.get_instagram_unread_count()
+                    return success
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.MESSAGES_CHECK:
+                if self.messaging_controller:
+                    logger.command("Checking all messages...")
+                    success, response = self.messaging_controller.read_all_messages()
+                    self.messaging_controller.update_last_check_time()
+                    return success
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.MESSAGES_UNREAD_COUNT:
+                if self.messaging_controller:
+                    logger.command("Getting total unread count...")
+                    success, response = self.messaging_controller.get_total_unread_count()
+                    return success
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.REPLY_MESSAGE:
+                if self.messaging_controller:
+                    logger.command("Replying to message...")
+                    if entity:
+                        success, response = self.messaging_controller.reply_to_last_message(entity)
+                        if not response:
+                            self.tts_service.speak(response)
+                        return success
+                    else:
+                        self.tts_service.speak("Sir, please specify your reply message")
+                        return False
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
+            elif intent == Intent.MARK_MESSAGES_READ:
+                if self.messaging_controller:
+                    logger.command("Marking messages as read...")
+                    success, response = self.messaging_controller.mark_all_as_read()
+                    return success
+                else:
+                    self.tts_service.speak("Sorry sir, messaging service is not enabled")
+                    return False
+
             elif intent == Intent.UNKNOWN:
                 logger.warning("Command not recognized")
                 self._print_help()
@@ -536,7 +773,15 @@ class VoiceAssistantDaemonRefactored:
         logger.print_raw("  📱 Phone Tracking:")
         logger.print_raw("    - where is my phone / phone location")
         logger.print_raw("    - start tracking / stop tracking")
-        logger.print_raw("    - tracking status\n")
+        logger.print_raw("    - tracking status")
+        logger.print_raw("  💬 Messaging:")
+        logger.print_raw("    - read my whatsapp messages / read my instagram messages")
+        logger.print_raw("    - check my messages / read my messages")
+        logger.print_raw("    - send whatsapp message to [contact] [message]")
+        logger.print_raw("    - send instagram message to [contact] [message]")
+        logger.print_raw("    - reply to [message]")
+        logger.print_raw("    - how many messages / unread messages count")
+        logger.print_raw("    - mark all as read\n")
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully"""
@@ -560,6 +805,22 @@ class VoiceAssistantDaemonRefactored:
             # Stop HTTP server
             if self.phone_tracking_http_server:
                 self.phone_tracking_http_server.stop()
+            
+            # Stop message monitor
+            if self.message_monitor:
+                self.message_monitor.stop_monitoring()
+            
+            # Stop unread alert checker
+            if self._unread_alert_stop_event:
+                self._unread_alert_stop_event.set()
+            if self._unread_alert_thread:
+                self._unread_alert_thread.join(timeout=5)
+            
+            # Cleanup messaging services
+            if self.whatsapp_service:
+                self.whatsapp_service.cleanup()
+            if self.instagram_service:
+                self.instagram_service.cleanup()
             
             # Close audio devices
             try:
