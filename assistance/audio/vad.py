@@ -6,6 +6,7 @@ Detects when user starts/stops speaking using webrtcvad
 import webrtcvad
 import numpy as np
 from collections import deque
+from assistance.utils.logger import logger
 
 
 class VoiceActivityDetector:
@@ -51,9 +52,10 @@ class VoiceActivityDetector:
         expected_size = len(frame_bytes)
         if expected_size != self.frame_size * 2:
             # Log warning instead of silently failing
-            print(
-                f"⚠️ Frame size mismatch: expected {self.frame_size * 2}, got {expected_size}. "
-                f"Sample rate: {self.sample_rate}, Frame duration: {self.frame_duration_ms}ms"
+            logger.warning(
+                f"Frame size mismatch: expected {self.frame_size * 2}, got {expected_size}. "
+                f"Sample rate: {self.sample_rate}, Frame duration: {self.frame_duration_ms}ms",
+                module="VAD"
             )
             return False
             
@@ -78,13 +80,13 @@ class VoiceActivityDetector:
         if not self.is_speaking and sum(self.speech_buffer) >= self.speech_start_threshold:
             self.is_speaking = True
             state_changed = True
-            print("🎤 Speech detected")
+            logger.listening("Speech detected", module="VAD")
             
         # Check if speech ended
         elif self.is_speaking and sum(self.speech_buffer) <= self.speech_end_threshold:
             self.is_speaking = False
             state_changed = True
-            print("🔇 Speech ended")
+            logger.listening("Speech ended", module="VAD")
             
         return state_changed
     
