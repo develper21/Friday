@@ -9,6 +9,7 @@ import os
 import re
 import shlex
 from typing import Tuple, Optional, List
+from assistance.utils.logger import logger
 from assistance.utils.errors import ValidationError
 
 
@@ -111,7 +112,7 @@ class TerminalController:
         
         args = self._validate_command(cmd)
         
-        print(f"💻 [Terminal Execution]: {' '.join(args)}")
+        logger.command(f"Terminal Execution: {' '.join(args)}", module="TerminalController")
         try:
             # Execute without shell for security
             process = subprocess.run(
@@ -145,7 +146,7 @@ class TerminalController:
         """
         Update and upgrade all Linux packages and system repositories
         """
-        print("🔄 Initiating complete Linux system update and upgrade...")
+        logger.info("Initiating complete Linux system update and upgrade...", module="TerminalController")
         
         # Check if terminal emulator is available to run interactively with GUI password prompt if needed
         terminal_emulators = ["gnome-terminal", "konsole", "xfce4-terminal", "xterm", "kitty", "alacritty"]
@@ -168,7 +169,7 @@ class TerminalController:
                 subprocess.Popen(cmd_args, start_new_session=True)
                 return True, "Sir, I have opened the terminal to update and upgrade your Linux system packages."
             except (subprocess.SubprocessError, OSError) as e:
-                print(f"Failed to launch terminal: {e}")
+                logger.error(f"Failed to launch terminal: {e}", module="TerminalController")
 
         # Fallback to direct subprocess run (without command chaining for security)
         try:
@@ -195,7 +196,7 @@ class TerminalController:
             return False, "Sir, please specify which package to install."
 
         package_name = package_name.lower().strip()
-        print(f"📦 Installing package: {package_name}")
+        logger.command(f"Installing package: {package_name}", module="TerminalController")
 
         # Validate package name for security
         if not self._is_safe_argument(package_name):
@@ -216,7 +217,7 @@ class TerminalController:
                     subprocess.Popen(cmd_args, start_new_session=True)
                     return True, f"Sir, initiating installation of {package_name} in the terminal."
                 except (subprocess.SubprocessError, OSError) as e:
-                    print(f"Failed to launch terminal: {e}")
+                    logger.error(f"Failed to launch terminal: {e}", module="TerminalController")
                     continue
 
         # Fallback to direct command execution
