@@ -23,7 +23,17 @@ INTENT_MAP = {
     15: "START_TRACKING",
     16: "STOP_TRACKING",
     17: "TRACKING_STATUS",
-    18: "UNKNOWN"
+    18: "WHATSAPP_READ",
+    19: "WHATSAPP_SEND",
+    20: "WHATSAPP_UNREAD_COUNT",
+    21: "INSTAGRAM_READ",
+    22: "INSTAGRAM_SEND",
+    23: "INSTAGRAM_UNREAD_COUNT",
+    24: "MESSAGES_CHECK",
+    25: "MESSAGES_UNREAD_COUNT",
+    26: "REPLY_MESSAGE",
+    27: "MARK_MESSAGES_READ",
+    28: "UNKNOWN"
 }
 
 INTENT_TO_ID = {v: k for k, v in INTENT_MAP.items()}
@@ -214,7 +224,110 @@ TRAINING_CORPUS = [
     ("check tracking status", INTENT_TO_ID["TRACKING_STATUS"]),
     ("phone monitoring status", INTENT_TO_ID["TRACKING_STATUS"]),
 
-    # UNKNOWN (18)
+    # WHATSAPP_READ (18)
+    ("read my whatsapp messages", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("read whatsapp", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("check whatsapp messages", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("whatsapp messages suna", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("whatsapp check karo", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("show whatsapp messages", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("whatsapp messages padh", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("mera whatsapp check karo", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("what's on whatsapp", INTENT_TO_ID["WHATSAPP_READ"]),
+    ("show me my whatsapp", INTENT_TO_ID["WHATSAPP_READ"]),
+
+    # WHATSAPP_SEND (19)
+    ("send whatsapp message", INTENT_TO_ID["WHATSAPP_SEND"]),
+    ("whatsapp message bhej", INTENT_TO_ID["WHATSAPP_SEND"]),
+    ("send message on whatsapp", INTENT_TO_ID["WHATSAPP_SEND"]),
+    ("whatsapp pe message bhejo", INTENT_TO_ID["WHATSAPP_SEND"]),
+    ("text on whatsapp", INTENT_TO_ID["WHATSAPP_SEND"]),
+    ("whatsapp kar", INTENT_TO_ID["WHATSAPP_SEND"]),
+    ("send a whatsapp", INTENT_TO_ID["WHATSAPP_SEND"]),
+    ("message on whatsapp", INTENT_TO_ID["WHATSAPP_SEND"]),
+
+    # WHATSAPP_UNREAD_COUNT (20)
+    ("how many whatsapp messages", INTENT_TO_ID["WHATSAPP_UNREAD_COUNT"]),
+    ("whatsapp unread count", INTENT_TO_ID["WHATSAPP_UNREAD_COUNT"]),
+    ("unread whatsapp", INTENT_TO_ID["WHATSAPP_UNREAD_COUNT"]),
+    ("kitne whatsapp messages", INTENT_TO_ID["WHATSAPP_UNREAD_COUNT"]),
+    ("whatsapp messages kitne hain", INTENT_TO_ID["WHATSAPP_UNREAD_COUNT"]),
+    ("count whatsapp messages", INTENT_TO_ID["WHATSAPP_UNREAD_COUNT"]),
+    ("whatsapp message count", INTENT_TO_ID["WHATSAPP_UNREAD_COUNT"]),
+
+    # INSTAGRAM_READ (21)
+    ("read my instagram messages", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("read instagram", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("check instagram messages", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("instagram messages suna", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("instagram check karo", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("show instagram messages", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("instagram dm check", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("instagram dms padh", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("check my instagram dms", INTENT_TO_ID["INSTAGRAM_READ"]),
+    ("show instagram dms", INTENT_TO_ID["INSTAGRAM_READ"]),
+
+    # INSTAGRAM_SEND (22)
+    ("send instagram message", INTENT_TO_ID["INSTAGRAM_SEND"]),
+    ("instagram message bhej", INTENT_TO_ID["INSTAGRAM_SEND"]),
+    ("send message on instagram", INTENT_TO_ID["INSTAGRAM_SEND"]),
+    ("instagram pe message bhejo", INTENT_TO_ID["INSTAGRAM_SEND"]),
+    ("dm on instagram", INTENT_TO_ID["INSTAGRAM_SEND"]),
+    ("instagram dm karo", INTENT_TO_ID["INSTAGRAM_SEND"]),
+    ("send instagram dm", INTENT_TO_ID["INSTAGRAM_SEND"]),
+    ("message on instagram", INTENT_TO_ID["INSTAGRAM_SEND"]),
+
+    # INSTAGRAM_UNREAD_COUNT (23)
+    ("how many instagram messages", INTENT_TO_ID["INSTAGRAM_UNREAD_COUNT"]),
+    ("instagram unread count", INTENT_TO_ID["INSTAGRAM_UNREAD_COUNT"]),
+    ("unread instagram", INTENT_TO_ID["INSTAGRAM_UNREAD_COUNT"]),
+    ("kitne instagram messages", INTENT_TO_ID["INSTAGRAM_UNREAD_COUNT"]),
+    ("instagram dms kitne hain", INTENT_TO_ID["INSTAGRAM_UNREAD_COUNT"]),
+    ("count instagram messages", INTENT_TO_ID["INSTAGRAM_UNREAD_COUNT"]),
+    ("instagram message count", INTENT_TO_ID["INSTAGRAM_UNREAD_COUNT"]),
+
+    # MESSAGES_CHECK (24)
+    ("check my messages", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("read my messages", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("check messages", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("messages check karo", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("messages suna", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("show messages", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("mera messages check karo", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("kya messages hain", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("any new messages", INTENT_TO_ID["MESSAGES_CHECK"]),
+    ("show me my messages", INTENT_TO_ID["MESSAGES_CHECK"]),
+
+    # MESSAGES_UNREAD_COUNT (25)
+    ("how many messages", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+    ("unread messages count", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+    ("total unread messages", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+    ("kitne messages hain", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+    ("messages kitne unread hain", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+    ("message count", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+    ("count unread messages", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+    ("how many unread", INTENT_TO_ID["MESSAGES_UNREAD_COUNT"]),
+
+    # REPLY_MESSAGE (26)
+    ("reply to", INTENT_TO_ID["REPLY_MESSAGE"]),
+    ("reply karo", INTENT_TO_ID["REPLY_MESSAGE"]),
+    ("jawab do", INTENT_TO_ID["REPLY_MESSAGE"]),
+    ("send reply", INTENT_TO_ID["REPLY_MESSAGE"]),
+    ("reply bhej", INTENT_TO_ID["REPLY_MESSAGE"]),
+    ("respond to", INTENT_TO_ID["REPLY_MESSAGE"]),
+    ("send a reply", INTENT_TO_ID["REPLY_MESSAGE"]),
+    ("answer back", INTENT_TO_ID["REPLY_MESSAGE"]),
+
+    # MARK_MESSAGES_READ (27)
+    ("mark all as read", INTENT_TO_ID["MARK_MESSAGES_READ"]),
+    ("mark messages as read", INTENT_TO_ID["MARK_MESSAGES_READ"]),
+    ("messages read kar", INTENT_TO_ID["MARK_MESSAGES_READ"]),
+    ("sab messages read kar do", INTENT_TO_ID["MARK_MESSAGES_READ"]),
+    ("mark as read", INTENT_TO_ID["MARK_MESSAGES_READ"]),
+    ("clear unread messages", INTENT_TO_ID["MARK_MESSAGES_READ"]),
+    ("mark all messages read", INTENT_TO_ID["MARK_MESSAGES_READ"]),
+
+    # UNKNOWN (28)
     ("random noise phrase", INTENT_TO_ID["UNKNOWN"]),
     ("something weird", INTENT_TO_ID["UNKNOWN"]),
     ("abracadabra", INTENT_TO_ID["UNKNOWN"])
