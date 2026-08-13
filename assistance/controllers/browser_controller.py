@@ -6,6 +6,7 @@ Handles browser tab management
 import subprocess
 import psutil
 from typing import List
+from assistance.utils.logger import logger
 
 
 class BrowserController:
@@ -26,25 +27,25 @@ class BrowserController:
         Returns:
             True if successful
         """
-        print(f"Closing all tabs for {browser}...")
+        logger.info(f"Closing all tabs for {browser}...", module="BrowserController")
         closed = False
         
         if browser == "all":
             # Close all browsers
             for browser_name, processes in self.browsers.items():
                 if self._close_browser(processes):
-                    print(f"✓ Closed {browser_name} tabs")
+                    logger.success(f"Closed {browser_name} tabs", module="BrowserController")
                     closed = True
         elif browser in self.browsers:
             if self._close_browser(self.browsers[browser]):
-                print(f"✓ Closed {browser} tabs")
+                logger.success(f"Closed {browser} tabs", module="BrowserController")
                 closed = True
         else:
-            print(f"✗ Unknown browser: {browser}")
+            logger.warning(f"Unknown browser: {browser}", module="BrowserController")
             return False
             
         if not closed:
-            print("✗ No browsers running")
+            logger.warning("No browsers running", module="BrowserController")
             
         return closed
     
@@ -77,7 +78,7 @@ class BrowserController:
             return closed
             
         except Exception as e:
-            print(f"✗ Error closing browser: {e}")
+            logger.error(f"Error closing browser: {e}", module="BrowserController")
             return False
     
     def get_running_browsers(self) -> List[str]:
