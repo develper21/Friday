@@ -26,3 +26,4 @@ src/jarvis/_version.py
 .reasonix/
 package-lock.json
 logs
+hf_deploy
