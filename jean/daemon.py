@@ -3,6 +3,7 @@ Daemon compatibility module.
 """
 
 from assistance.daemon import VoiceAssistantDaemon
+from assistance.utils.logger import logger
 
 _global_daemon = None
 _stop_requested = False
@@ -16,7 +17,7 @@ def main(smoke_test=False):
     """Main daemon entry point"""
     global _global_daemon
     if smoke_test:
-        print("Smoke test passed")
+        logger.success("Smoke test passed", module="Daemon")
         return
     daemon = VoiceAssistantDaemon()
     _global_daemon = daemon
